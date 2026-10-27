@@ -1,3 +1,4 @@
+// Copyright (C) 2026 teofilcelzmecher. All rights reserved. See LICENSE.
 /*
  * Nook's ui helpers: escaping and markdown-lite, little formatters, avatars and
  * nook icons, the theme engine (one scheme for the app, one per nook for the
@@ -132,7 +133,8 @@
 
   /** what sits on an avatar's shape: a photo, an icon or the first letter */
   function avatarFace(u) {
-    if (u.photo && /^data:image\/(jpeg|png|webp);/.test(u.photo)) {
+    // a photo picked here (data:) or one the server keeps (https://…/api/images/…)
+    if (u.photo && (/^data:image\/(jpeg|png|webp);/.test(u.photo) || /^https?:\/\/[^"'<>\s]+\/api\/images\/[\w-]+$/.test(u.photo))) {
       const mask = shapeMask(u.shape);
       return `<img src="${esc(u.photo)}" alt="" style="-webkit-mask-image:${mask};mask-image:${mask}">`;
     }
@@ -342,9 +344,10 @@
         e.preventDefault();
         close(null);
       });
-      // a press on the scrim dismisses, as a sheet should
+      // a press on the scrim dismisses, as a sheet should, but not the second half of the double-tap that opened it
+      const openedAt = performance.now();
       el.addEventListener('pointerdown', (e) => {
-        if (e.target !== el) return;
+        if (e.target !== el || performance.now() - openedAt < 350) return;
         const r = el.getBoundingClientRect();
         if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) close(null);
       });
