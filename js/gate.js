@@ -44,8 +44,11 @@
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
   }
 
-  // the app's scripts run in order, as if they had been on the page all along
+  // the app's scripts run in order, as if they had been on the page all along; only ever once
+  let booted = false;
   function boot() {
+    if (booted) return;
+    booted = true;
     document.documentElement.classList.remove('gated');
     for (const src of APP) {
       const script = document.createElement('script');
@@ -126,8 +129,9 @@
     }
   }
 
+  let letInAlready = false;
   async function check() {
-    if (input.value.length !== LENGTH || checking || Date.now() < waitUntil) return;
+    if (letInAlready || input.value.length !== LENGTH || checking || Date.now() < waitUntil) return;
     if (!window.crypto || !crypto.subtle) {
       msg.textContent = 'This page needs a secure (https) connection to check codes.';
       return;
@@ -137,6 +141,9 @@
     const digest = await hash(input.value);
     checking = false;
     if (INVITES.includes(digest)) {
+      letInAlready = true;
+      go.disabled = true;
+      input.disabled = true;
       write(KEY, digest);
       letIn();
       return;
