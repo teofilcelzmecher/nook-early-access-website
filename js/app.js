@@ -84,7 +84,8 @@
   let viewNook = null;
   // the colours the page wears: its nest's, or a profile's in the style its owner picked ({ color, style })
   let viewWear = null;
-  const wearing = () => (viewWear && S().themeNooks ? viewWear : null);
+  // a nest's or profile's colours follow the setting; a chat's own colour (1.0) is worn either way
+  const wearing = () => (viewWear && (S().themeNooks || viewWear.always) ? viewWear : null);
   let navigating = false; // drawing a page inside a view transition
   let pendingShare = null; // what was tapped, to carry over into the next page
   const scrolls = new Map();
@@ -215,7 +216,7 @@
     main.innerHTML = view.html;
     // a view transition moves the page itself; without one it fades up
     if (main.firstElementChild && !navigating) main.firstElementChild.classList.add('enter');
-    document.title = `${view.title} · Budgie`;
+    document.title = `${Nook.i18n ? Nook.i18n.t(view.title) : view.title} · Budgie`;
 
     // the app wears the nook (or the profile) it is in, and the brand takes its shape
     const wear = wearing();
@@ -304,7 +305,7 @@
     const row = $('#drawer-me');
     row.href = '#/u/' + encodeURIComponent(me.name);
     row.setAttribute('aria-label', `Your profile, u/${me.name}`);
-    row.innerHTML = `${avatar(me, 44)}<span class="row-text"><b>${esc(me.name)}</b><small>View your profile</small></span>${icon('chevron_right')}`;
+    row.innerHTML = `${avatar(me, 44)}<span class="row-text"><b translate="no">${esc(me.name)}</b><small>View your profile</small></span>${icon('chevron_right')}`;
   }
 
   let lastUnread = -1;
@@ -438,7 +439,7 @@
     } else {
       flip();
     }
-    if (key === 'calm') M3.toast(S().calm ? 'Calm mode on: no more numbers' : 'Calm mode off', { symbol: 'self_improvement', shape: 'heart' });
+    if (key === 'calm') M3.toast(S().calm ? 'Calm mode on: no numbers, no streaks, no confetti' : 'Calm mode off', { symbol: 'self_improvement', shape: 'heart' });
   }
 
   /** puts the settings into effect; settles once every colour is in place */
@@ -746,7 +747,7 @@
       return (
         `<button type="button" class="menu-sheet-item${item.destructive ? ' is-destructive' : ''}" role="${checkable ? 'menuitemcheckbox' : 'menuitem'}"` +
         `${checkable ? ` aria-checked="${item.checked}"` : ''} data-i="${i}"${item.disabled ? ' disabled' : ''} data-m3-ripple>` +
-        `<span class="m3-icon" aria-hidden="true">${symbol}</span><span>${esc(item.label)}</span></button>`
+        `<span translate="no" class="m3-icon" aria-hidden="true">${symbol}</span><span>${esc(item.label)}</span></button>`
       );
     };
     ui.sheet({
@@ -1348,14 +1349,74 @@
   }
   ACTIONS.block = (btn) => blockPerson(btn.dataset.user);
   ACTIONS.unblock = (btn) => unblockPerson(btn.dataset.user);
-  // a chat's More menu: report them, or block them
+  /** a chat's colour, picked from the swatches (or any colour), or back to the usual: both of you see it */
+  function chatColour(name) {
+    const now = store.chatTheme(name);
+    let picked = now || S().seed;
+    ui.sheet({
+      headline: 'Chat colour',
+      symbol: 'palette',
+      shape: store.user(name).shape || 'cookie9',
+      html:
+        `<p class="muted" style="margin-top:0">The chat with u/${esc(name)} wears it, for both of you. The chat says you changed it.</p>` +
+        swatchesHTML(picked, 'chat') +
+        `<div class="chat-swatch-preview" id="cs-preview"><span class="bubble solo">Hi! 👋</span><span class="bubble solo mine">Looks good!</span></div>`,
+      setup(body) {
+        const preview = body.querySelector('#cs-preview');
+        const paint = () => ui.theme.scheme(picked.toLowerCase(), 'tonalSpot').then((colors) => preview.isConnected && M3.color.apply(colors, preview), () => {});
+        paint();
+        wireSwatches(body.querySelector('[data-swatches]'), (seed) => {
+          picked = seed;
+          paint();
+        });
+      },
+      actions: [
+        ...(now ? [{ label: 'Usual colours', value: '' }] : []),
+        { label: 'Cancel', value: null },
+        { label: 'Use it', variant: 'filled', run: () => picked },
+      ],
+    }).then(async (color) => {
+      if (color == null || color === now) return;
+      try {
+        await store.setChatTheme(name, color);
+      } catch (error) {
+        return showError(error);
+      }
+      fx.haptic(8);
+    });
+  }
+
+  // a moderator takes down just someone's profile picture or banner (from 1.0): no report needed, and no ban
+  async function removePart(name, part) {
+    const what = part === 'photo' ? 'profile picture' : 'banner';
+    const reason = await pickReason(`Remove u/${name}’s ${what}?`, 'hide_image', `Their ${what} is deleted and they’re told why. The rest of their profile and their account stay.`, 'Remove');
+    if (!reason) return;
+    try {
+      await store.adminRemove('user', name, reason, [part]);
+    } catch (error) {
+      return showError(error);
+    }
+    M3.toast(`${part === 'photo' ? 'Picture' : 'Banner'} removed, and u/${name} told why`, { symbol: 'gavel', shape: 'pixelCircle' });
+    await store.sync().catch(() => {});
+    render();
+  }
+  // someone's More menu (on their profile, or in a chat with them): report them, or block them; for a moderator,
+  // their picture or banner can go too
   ACTIONS['person-menu'] = (btn) => {
     const name = btn.dataset.user;
+    const u = store.user(name);
+    const mod = store.isAdmin() && views.serverAt('1.0.0');
+    // in a chat with them (1.0): the chat's colour
+    const inChat = route && route.view === 'thread' && views.serverAt('1.0.0') && store.friendStatus(name) === 'friends';
     menu(btn, [
+      ...(inChat ? [{ label: 'Chat colour', symbol: 'palette', onSelect: () => chatColour(name) }, { separator: true }] : []),
       { label: `Report u/${name}`, symbol: 'flag', onSelect: () => report('user', { name }) },
       store.isBlocked(name)
         ? { label: `Unblock u/${name}`, symbol: 'lock_open', onSelect: () => unblockPerson(name) }
         : { label: `Block u/${name}`, symbol: 'block', destructive: true, onSelect: () => blockPerson(name) },
+      ...(mod && (u.photo || u.banner) ? [{ separator: true }] : []),
+      ...(mod && u.photo ? [{ label: 'Remove their profile picture', symbol: 'hide_image', destructive: true, onSelect: () => removePart(name, 'photo') }] : []),
+      ...(mod && u.banner ? [{ label: 'Remove their banner', symbol: 'hide_image', destructive: true, onSelect: () => removePart(name, 'banner') }] : []),
     ], { placement: 'bottom-end' });
   };
 
@@ -1576,7 +1637,7 @@
         `<div class="field"><span class="field-label">Category</span><div class="chips" style="flex-wrap:wrap">${categories.map((c) => `<button type="button" class="chip" data-cat="${c}" aria-pressed="${c === model.category}">${c}</button>`).join('')}</div></div>` +
         `<div class="field"><span class="field-label">Colour</span>${swatchesHTML(model.color, 'nook')}</div>` +
         `<div class="field"><span class="field-label">Shape</span>${shapeGridHTML(model.shape)}</div>` +
-        `<div class="field"><span class="field-label">Symbol</span><div class="symbol-grid">${ui.NOOK_SYMBOLS.map((s) => `<button type="button" data-symbol="${s}" aria-pressed="${s === model.symbol}" aria-label="${s.replace(/_/g, ' ')}"><span class="m3-icon">${s}</span></button>`).join('')}</div></div>`,
+        `<div class="field"><span class="field-label">Symbol</span><div class="symbol-grid">${ui.NOOK_SYMBOLS.map((s) => `<button type="button" data-symbol="${s}" aria-pressed="${s === model.symbol}" aria-label="${s.replace(/_/g, ' ')}"><span translate="no" class="m3-icon">${s}</span></button>`).join('')}</div></div>`,
       setup(body) {
         const preview = body.querySelector('#np');
         const npIcon = body.querySelector('#np-icon');
@@ -1683,7 +1744,7 @@
     `<div class="pick-list">${names
       .map((n) => {
         const u = store.user(n);
-        return `<label class="switch-row pick-row">${avatar(u, 36)}<span class="switch-text"><span>${esc(u.name)}</span>${u.pronouns ? `<small>${esc(u.pronouns)}</small>` : ''}</span><input type="checkbox" class="m3-switch" role="switch" data-pick="${esc(u.name)}"></label>`;
+        return `<label class="switch-row pick-row">${avatar(u, 36)}<span class="switch-text"><span translate="no">${esc(u.name)}</span>${u.pronouns ? `<small>${esc(u.pronouns)}</small>` : ''}</span><input type="checkbox" class="m3-switch" role="switch" data-pick="${esc(u.name)}"></label>`;
       })
       .join('')}</div>`;
   const pickedIn = (body) => $$('[data-pick]', body).filter((i) => i.checked).map((i) => i.dataset.pick);
@@ -1782,7 +1843,7 @@
       const u = store.user(m.name);
       const me = store.isMe(m.name);
       return (
-        `<div class="group-member"><button type="button" class="row-link" data-profile="${esc(u.name)}" data-m3-ripple>${avatar(u, 40)}<span class="row-text"><b>${esc(u.name)}${me ? ' <span class="muted">(you)</span>' : ''}</b><small>${m.role === 'owner' ? 'Owner' : 'Member'}</small></span></button>` +
+        `<div class="group-member"><button type="button" class="row-link" data-profile="${esc(u.name)}" data-m3-ripple>${avatar(u, 40)}<span class="row-text"><b><span translate="no">${esc(u.name)}</span>${me ? ' <span class="muted">(you)</span>' : ''}</b><small>${m.role === 'owner' ? 'Owner' : 'Member'}</small></span></button>` +
         (owner && !me ? `<button type="button" class="m3-icon-btn" data-remove="${esc(u.name)}" aria-label="Remove u/${esc(u.name)} from the group" data-tooltip="Remove">${icon('person_remove')}</button>` : '') +
         '</div>'
       );
@@ -1796,7 +1857,7 @@
       shape: g.shape,
       className: 'wide',
       html:
-        `<div class="group-preview">${views.groupIcon(g, 64)}<span class="row-text"><b class="m3-title">${esc(g.name)}</b><small class="muted">${plural(g.members.length, 'member')} · made ${esc(ui.ago(g.createdAt))}</small></span></div>` +
+        `<div class="group-preview">${views.groupIcon(g, 64)}<span class="row-text"><b class="m3-title" translate="no">${esc(g.name)}</b><small class="muted">${plural(g.members.length, 'member')} · made ${esc(ui.ago(g.createdAt))}</small></span></div>` +
         '<div class="toolbar group-tools">' +
         (canAdd && g.members.length < GROUP_MAX ? `<button type="button" class="m3-btn tonal small" data-do="add">${icon('person_add')}Add friends</button>` : '') +
         (owner ? `<button type="button" class="m3-btn tonal small" data-do="edit">${icon('edit')}Edit group</button>` : '') +
@@ -1891,7 +1952,7 @@
       shape: g.shape,
       className: 'wide',
       html:
-        `<div class="group-preview"><span id="gp-icon">${views.groupIcon(model, 64)}</span><span class="row-text"><b class="m3-title" id="gp-name">${esc(g.name)}</b><small class="muted">${plural(g.members.length, 'member')}</small></span></div>` +
+        `<div class="group-preview"><span id="gp-icon">${views.groupIcon(model, 64)}</span><span class="row-text"><b class="m3-title" id="gp-name" translate="no">${esc(g.name)}</b><small class="muted">${plural(g.members.length, 'member')}</small></span></div>` +
         `<div class="field"><label for="eg-name">Name</label><input class="m3-field" id="eg-name" maxlength="40" value="${esc(g.name)}" autocomplete="off"><span class="error" id="eg-err"></span></div>` +
         `<div class="field"><span class="field-label">Colour</span>${swatchesHTML(model.color, 'group')}</div>` +
         `<div class="field"><span class="field-label">Shape</span>${groupShapesHTML(model.shape)}</div>`,
@@ -2007,7 +2068,7 @@
       store.state.collections
         .map((col) => {
           const on = col.posts.includes(p.id);
-          return `<label class="switch-row"><m3-shape-icon shape="${col.shape}" symbol="collections_bookmark" size="36" icon-size="18" style="--m3-shape-icon-color:${col.color};--m3-shape-icon-on-color:${ui.ink(col.color)}"></m3-shape-icon><span class="switch-text"><span>${esc(col.name)}</span><small>${plural(col.posts.length, 'post')}</small></span><input type="checkbox" class="m3-switch" role="switch" data-col="${col.id}"${on ? ' checked' : ''}></label>`;
+          return `<label class="switch-row"><m3-shape-icon shape="${col.shape}" symbol="collections_bookmark" size="36" icon-size="18" style="--m3-shape-icon-color:${col.color};--m3-shape-icon-on-color:${ui.ink(col.color)}"></m3-shape-icon><span class="switch-text"><span translate="no">${esc(col.name)}</span><small>${plural(col.posts.length, 'post')}</small></span><input type="checkbox" class="m3-switch" role="switch" data-col="${col.id}"${on ? ' checked' : ''}></label>`;
         })
         .join('') || '<p class="muted">No collections yet. Make your first one below.</p>';
     ui.sheet({
@@ -2048,7 +2109,7 @@
     const me = store.state.me;
     const model = {
       color: me.color, shape: me.shape, icon: me.icon || '', photo: me.photo || '', photoGif: me.photoGif || '', banner: me.banner || '', bannerGif: me.bannerGif || '',
-      font: me.font || '', flag: me.flag || '', interests: [...(me.interests || [])], scheme: me.scheme || 'tonalSpot', sticker: me.sticker || '',
+      font: me.font || '', flags: [...(me.flags || [])], interests: [...(me.interests || [])], scheme: me.scheme || 'tonalSpot', sticker: me.sticker || '',
     };
     const face = (name) => ui.avatarFace({ name: name || me.name, shape: model.shape, icon: model.icon, photo: model.photo, photoGif: model.photoGif }, { moving: true });
     const bannerPreview = () => ui.bannerImage(model) || `<span class="ep-banner-empty">${icon('panorama')}No banner yet</span>`;
@@ -2059,30 +2120,51 @@
     const fonts = major > 0 || minor >= 6;
     const more = major > 0 || minor >= 7;
     const PRONOUN_PICKS = ['she/her', 'he/him', 'they/them', 'she/they', 'he/they', 'any pronouns', 'ask me'];
-    // the flag you wear, as a row; pressing it brings up every flag to pick from
-    const flagRow = (id) => {
-      const flag = ui.PRIDE_FLAGS.find(([f]) => f === id);
+    // the flags you wear (up to four, from Budgie 1.0; one before), as a row; pressing it brings up every flag
+    const FLAGS_MAX = views.serverAt('1.0.0') ? 4 : 1;
+    const flagRow = (ids) => {
+      const flags = ids.map((id) => ui.PRIDE_FLAGS.find(([f]) => f === id)).filter(Boolean);
       return (
-        (flag ? `<span class="flag-big">${ui.flagSVG(id)}</span>` : `<span class="flag-none">${icon('block')}</span>`) +
-        `<span class="row-text"><b>${flag ? flag[1] : 'None'}</b><small>${flag ? 'Change or remove it' : `Choose from ${ui.PRIDE_FLAGS.length} flags`}</small></span>${icon('chevron_right')}`
+        (flags.length ? `<span class="flag-stack">${flags.map(([id]) => `<span class="flag-big">${ui.flagSVG(id)}</span>`).join('')}</span>` : `<span class="flag-none">${icon('block')}</span>`) +
+        `<span class="row-text"><b>${flags.length ? esc(flags.map((f) => f[1]).join(', ')) : 'None'}</b><small>${
+          flags.length ? 'Change or remove them' : `Choose from ${ui.PRIDE_FLAGS.length} flags${FLAGS_MAX > 1 ? `, up to ${FLAGS_MAX}` : ''}`
+        }</small></span>${icon('chevron_right')}`
       );
     };
-    const flagTile = (id, label, art) => `<button type="button" data-flag="${id}" aria-pressed="${id === model.flag}"${id === model.flag ? ' autofocus' : ''}>${art}<small>${label}</small></button>`;
-    // resolves with the flag picked ('' for none), or null when put away
-    const pickFlag = () =>
-      ui.sheet({
-        headline: 'Pride flag',
+    const flagTile = (id, label, art, on) => `<button type="button" data-flag="${id}" aria-pressed="${on}">${art}<small>${label}</small></button>`;
+    // resolves with the flags picked (none is []), or null when put away
+    const pickFlags = () => {
+      let picked = [...model.flags];
+      return ui.sheet({
+        headline: FLAGS_MAX > 1 ? 'Pride flags' : 'Pride flag',
         symbol: 'flag',
         shape: 'heart',
         className: 'flag-sheet wide',
         html:
+          (FLAGS_MAX > 1 ? `<p class="muted" style="margin-top:0">Pick up to ${FLAGS_MAX}. They show in the order you pick them.</p>` : '') +
           '<div class="flag-grid" role="group" aria-label="Pride flags">' +
-          flagTile('', 'None', `<span class="flag-none">${icon('block')}</span>`) +
-          ui.PRIDE_FLAGS.map(([id, label]) => flagTile(id, label, `<span class="flag-big">${ui.flagSVG(id)}</span>`)).join('') +
+          flagTile('', 'None', `<span class="flag-none">${icon('block')}</span>`, !picked.length) +
+          ui.PRIDE_FLAGS.map(([id, label]) => flagTile(id, label, `<span class="flag-big">${ui.flagSVG(id)}</span>`, picked.includes(id))).join('') +
           '</div>',
-        setup: (sheetBody, close) => sheetBody.querySelectorAll('[data-flag]').forEach((b) => b.addEventListener('click', () => close(b.dataset.flag))),
-        actions: [{ label: 'Cancel' }],
+        setup: (sheetBody, close) => {
+          const paint = () => sheetBody.querySelectorAll('[data-flag]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.flag ? picked.includes(b.dataset.flag) : !picked.length)));
+          sheetBody.querySelectorAll('[data-flag]').forEach((b) =>
+            b.addEventListener('click', () => {
+              const id = b.dataset.flag;
+              // one flag at a time on a server from before 1.0: picking is choosing
+              if (FLAGS_MAX === 1) return close(id ? [id] : []);
+              if (!id) picked = [];
+              else if (picked.includes(id)) picked = picked.filter((f) => f !== id);
+              else if (picked.length >= FLAGS_MAX) return M3.snackbar(`You can wear up to ${FLAGS_MAX} flags. Take one off first.`);
+              else picked.push(id);
+              paint();
+              fx.pop(b, 0.4);
+            })
+          );
+        },
+        actions: FLAGS_MAX > 1 ? [{ label: 'Cancel' }, { label: 'Done', variant: 'filled', run: () => picked }] : [{ label: 'Cancel' }],
       });
+    };
     const section = (shape, symbol, title) =>
       `<header class="m3-section-header ep-section"><m3-shape-icon shape="${shape}" symbol="${symbol}" size="30" icon-size="16"></m3-shape-icon><h3 class="m3-title">${title}</h3><m3-wavy-line></m3-wavy-line></header>`;
     const BIO_MAX = media ? 300 : 160;
@@ -2094,7 +2176,7 @@
       html:
         `<div class="ep-top" id="ep-top" style="--av:${me.color}">${media ? `<label class="ep-banner" id="ep-banner" for="ep-banner-file" title="Change your banner">${bannerPreview()}</label>` : ''}` +
         `<div class="nook-preview"><label class="ep-pick" for="ep-photo" title="Change your picture"><span class="avatar" id="ep-avatar" style="--av:${me.color};--av-ink:${ui.ink(me.color)};--s:80px"><m3-shape shape="${me.shape}" id="ep-shape"></m3-shape><span class="face" id="ep-face">${face()}</span></span></label>` +
-        `<div class="np-text"><b class="m3-title"><span class="${fonts ? ui.nameFont(model).trim() : ''}" id="ep-name">${esc(me.name)}</span><span id="ep-flag">${more ? ui.prideFlag(model) : ''}</span></b>` +
+        `<div class="np-text"><b class="m3-title"><span class="${fonts ? ui.nameFont(model).trim() : ''}" id="ep-name" translate="no">${esc(me.name)}</span><span id="ep-flag">${more ? ui.prideFlag(model) : ''}</span></b>` +
         `<span class="muted" id="ep-sub">${more && me.pronouns ? esc(me.pronouns) : 'Your shape and colour follow you everywhere'}</span></div></div></div>` +
         (more ? section('cookie9', 'person', 'You') : '') +
         `<div class="field"><label for="ep-input">Username</label><input class="m3-field" id="ep-input" maxlength="20" value="${esc(me.name)}" autocomplete="off"><span class="error" id="ep-err"></span></div>` +
@@ -2102,12 +2184,12 @@
           ? `<div class="field"><label for="ep-pronouns">Pronouns</label><input class="m3-field" id="ep-pronouns" maxlength="24" placeholder="Optional, like she/they" value="${esc(me.pronouns || '')}" autocomplete="off">` +
             `<div class="chips wrap" role="group" aria-label="Quick picks">${PRONOUN_PICKS.map((p) => `<button type="button" class="chip" data-pronouns="${p}">${p}</button>`).join('')}</div><span class="error" id="ep-pronouns-err"></span></div>` +
             '<div class="field"><span class="field-label" id="ep-flag-label">Pride flag</span>' +
-            `<button type="button" class="flag-pick" id="ep-flag-pick" aria-haspopup="dialog" aria-labelledby="ep-flag-label ep-flag-pick" data-m3-ripple>${flagRow(model.flag)}</button>` +
+            `<button type="button" class="flag-pick" id="ep-flag-pick" aria-haspopup="dialog" aria-labelledby="ep-flag-label ep-flag-pick" data-m3-ripple>${flagRow(model.flags)}</button>` +
             '<small class="muted">A small flag next to your name, everywhere it shows. Your pronouns and flag are optional, everyone on Budgie can see them, and you can change or remove them any time.</small></div>'
           : '') +
         (fonts
           ? '<div class="field"><span class="field-label">Name font</span><div class="font-grid" role="group" aria-label="Name font">' +
-            ui.NAME_FONTS.map(([id, label]) => `<button type="button" data-font="${id}" aria-pressed="${id === model.font}"><span class="font-sample${id ? ' name-font-' + id : ''}">${esc(me.name)}</span><small>${label}</small></button>`).join('') +
+            ui.NAME_FONTS.map(([id, label]) => `<button type="button" data-font="${id}" aria-pressed="${id === model.font}"><span class="font-sample${id ? ' name-font-' + id : ''}" translate="no">${esc(me.name)}</span><small>${label}</small></button>`).join('') +
             '</div><small class="muted">Your name shows in it on your profile, posts, comments and chats.</small></div>'
           : '') +
         `<div class="field"><label for="ep-bio">Bio</label><textarea class="m3-field" id="ep-bio" rows="4" maxlength="${BIO_MAX}" placeholder="Tell people what you’re into">${esc(me.bio || '')}</textarea>` +
@@ -2115,7 +2197,7 @@
         (more ? section('flower', 'palette', 'Look') : '') +
         '<div class="field"><span class="field-label">Picture</span>' +
         `<div class="symbol-grid face-grid" role="group" aria-label="Picture"><button type="button" data-face="" aria-pressed="${!model.icon && !model.photo}" aria-label="Your first letter"><b>Aa</b></button>` +
-        ui.PROFILE_ICONS.map((s) => `<button type="button" data-face="${s}" aria-pressed="${!model.photo && s === model.icon}" aria-label="${s.replace(/_/g, ' ')}"><span class="m3-icon">${s}</span></button>`).join('') +
+        ui.PROFILE_ICONS.map((s) => `<button type="button" data-face="${s}" aria-pressed="${!model.photo && s === model.icon}" aria-label="${s.replace(/_/g, ' ')}"><span translate="no" class="m3-icon">${s}</span></button>`).join('') +
         '</div>' +
         `<div class="toolbar"><label class="m3-btn tonal small photo-pick">${icon('add_a_photo')}<span id="ep-photo-label">${model.photo ? 'Change photo' : 'Upload a photo'}</span><input type="file" id="ep-photo" accept="image/*"></label>` +
         `<button type="button" class="m3-btn text small" id="ep-photo-remove"${model.photo ? '' : ' hidden'}>${icon('delete')}Remove photo</button></div>` +
@@ -2133,8 +2215,8 @@
             ui.PROFILE_SCHEMES.map(([id, label]) => `<button type="button" data-scheme="${id}" aria-pressed="${id === model.scheme}"><span class="scheme-dots" data-dots="${id}"><i></i><i></i><i></i><i></i></span><small>${label}</small></button>`).join('') +
             '</div><small class="muted">Your profile page wears your colour, worked into a whole Material palette in this style.</small></div>' +
             '<div class="field"><span class="field-label">Background shapes</span><div class="shape-grid sticker-grid" role="group" aria-label="Background shapes">' +
-            `<button type="button" data-sticker="" aria-pressed="${!model.sticker}" aria-label="A mix" data-tooltip="A mix"><span class="m3-icon">auto_awesome</span></button>` +
-            `<button type="button" data-sticker="none" aria-pressed="${model.sticker === 'none'}" aria-label="None" data-tooltip="None"><span class="m3-icon">block</span></button>` +
+            `<button type="button" data-sticker="" aria-pressed="${!model.sticker}" aria-label="A mix" data-tooltip="A mix"><span translate="no" class="m3-icon">auto_awesome</span></button>` +
+            `<button type="button" data-sticker="none" aria-pressed="${model.sticker === 'none'}" aria-label="None" data-tooltip="None"><span translate="no" class="m3-icon">block</span></button>` +
             M3Shapes.names.filter((n) => n !== 'softCookie').map((n) => `<button type="button" data-sticker="${n}" aria-pressed="${n === model.sticker}" aria-label="${n}" data-tooltip="${n}"><m3-shape shape="${n}"></m3-shape></button>`).join('') +
             '</div><small class="muted">They float behind your name on your profile, when it has no banner.</small></div>' +
             section('heart', 'interests', 'Interests') +
@@ -2192,10 +2274,10 @@
           );
           const flagPick = $$('#ep-flag-pick');
           flagPick.addEventListener('click', async () => {
-            const id = await pickFlag();
-            if (id == null || !flagPick.isConnected) return;
-            model.flag = id;
-            flagPick.innerHTML = flagRow(id);
+            const flags = await pickFlags();
+            if (!Array.isArray(flags) || !flagPick.isConnected) return;
+            model.flags = flags;
+            flagPick.innerHTML = flagRow(flags);
             $$('#ep-flag').innerHTML = ui.prideFlag(model);
             fx.pop($$('#ep-flag'), 0.6);
           });
@@ -2263,14 +2345,22 @@
           $$(sel).addEventListener('change', async (e) => {
             const err = $$(errSel);
             err.textContent = '';
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
             try {
-              const picture = await ui.pictureFrom(e.target.files[0], kind);
+              // a still picture: they choose the part to keep (a GIF keeps its middle)
+              let crop = null;
+              if (/^image\//.test(file.type) && file.type !== 'image/gif') {
+                crop = await ui.cropPicture(file, kind);
+                if (!crop) return;
+              }
+              const picture = await ui.pictureFrom(file, kind, crop);
               apply(picture.still, media ? picture.gif : '');
               fx.pop(popEl(), 0.6);
             } catch (error) {
               err.textContent = error.message;
             }
-            e.target.value = '';
           });
         picker('#ep-photo', 'photo', '#ep-photo-err', setPhoto, () => faceEl);
         $$('#ep-photo-remove').addEventListener('click', () => setPhoto('', ''));
@@ -2328,7 +2418,7 @@
                 pronounsErr.textContent = 'Keep those to pronouns.';
                 return false;
               }
-              Object.assign(fields, { pronouns, flag: model.flag, interests: model.interests, scheme: model.scheme, sticker: model.sticker });
+              Object.assign(fields, { pronouns, flag: model.flags[0] || '', flags: model.flags, interests: model.interests, scheme: model.scheme, sticker: model.sticker });
             }
             // pictures only travel when they changed: a new one as data (with its GIF), a removed one as ''
             if (model.photo !== (me.photo || '')) Object.assign(fields, { photo: model.photo, photoGif: model.photoGif });
@@ -2431,7 +2521,7 @@
   ACTIONS.credits = () => {
     closeDrawer();
     const person = (p, size, role) =>
-      `<li>${avatar(p, size)}<span class="row-text"><b>${esc(p.name)}</b><small>${esc(role)}</small></span></li>`;
+      `<li>${avatar(p, size)}<span class="row-text"><b translate="no">${esc(p.name)}</b><small>${esc(role)}</small></span></li>`;
     ui.sheet({
       headline: 'Credits',
       symbol: 'stars',
@@ -2547,6 +2637,7 @@
       type: startType,
       flair: draft.flair || null,
       image: null,
+      video: null, // a video already sent and checked (1.0): { id, url, poster, … }
       poll: draft.poll && draft.poll.length >= 2 ? draft.poll : ['', ''],
     };
     const title = $('#f-title', root);
@@ -2636,39 +2727,101 @@
     const inner = $('#f-drop-inner', root);
     const placeholder = inner.innerHTML;
     const showImage = () => {
-      if (model.image) {
-        inner.innerHTML = `<img src="${model.image}" alt="Your image"><button type="button" class="m3-icon-btn filled remove" id="f-remove" aria-label="Remove image"><span class="m3-icon">close</span></button>`;
+      if (model.image || model.video || model.gif) {
+        inner.innerHTML =
+          (model.video
+            ? `<video src="${esc(model.video.url)}" poster="${esc(model.video.poster)}" controls playsinline preload="metadata" aria-label="Your video"></video>`
+            : model.gif
+              ? `<img class="gif-pick" src="${esc(model.gif.url)}" alt="${esc(model.gif.title || 'GIF')}" translate="no" referrerpolicy="no-referrer"${model.gif.width && model.gif.height ? ` style="aspect-ratio:${model.gif.width}/${model.gif.height}"` : ''}>`
+              : `<img src="${model.image}" alt="Your image">`) +
+          `<button type="button" class="m3-icon-btn filled remove" id="f-remove" aria-label="${model.video ? 'Remove video' : 'Remove image'}"><span translate="no" class="m3-icon">close</span></button>`;
         $('#f-remove', root).addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
           model.image = null;
+          model.video = null;
+          model.gif = null;
           showImage();
         });
       } else {
         inner.innerHTML = placeholder;
       }
     };
+    // a GIF goes as it is (made smaller, it would stop moving); a video is sent at once, and made ready and checked
+    // on the server while you write the rest
+    const readGif = (file) =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('read'));
+        reader.readAsDataURL(file);
+      });
+    let sending = 0;
     const takeFile = async (file) => {
       const err = $('#f-image-err', root);
       err.textContent = '';
-      if (!file || !file.type.startsWith('image/')) {
-        err.textContent = 'That doesn’t look like an image.';
+      const isVideo = !!file && store.state.videos && (file.type.startsWith('video/') || /\.(mp4|mov|m4v|webm|3gp|mkv)$/i.test(file.name));
+      if (!file || (!file.type.startsWith('image/') && !isVideo)) {
+        err.textContent = store.state.videos ? 'That doesn’t look like a picture or a video.' : 'That doesn’t look like an image.';
         return;
+      }
+      model.image = null;
+      model.video = null;
+      model.gif = null;
+      if (isVideo) {
+        if (file.size > 100 * 1024 * 1024) {
+          err.textContent = 'That video is too big. Try one under 100 MB (or a shorter one).';
+          return showImage();
+        }
+        const ticket = ++sending;
+        inner.innerHTML = `<span class="upload-progress"><m3-loading></m3-loading><b id="f-up-text">Sending your video… 0%</b><span class="upload-bar"><span id="f-up-bar"></span></span></span>`;
+        const submitBtn = $('#f-submit', root);
+        submitBtn.disabled = true;
+        try {
+          const video = await store.uploadVideo(file, (p) => {
+            if (ticket !== sending || !$('#f-up-text', root)) return;
+            $('#f-up-bar', root).style.width = Math.round(p * 100) + '%';
+            $('#f-up-text', root).textContent = p < 1 ? `Sending your video… ${Math.round(p * 100)}%` : 'Getting it ready and checking it…';
+          });
+          if (ticket !== sending) return;
+          model.video = video;
+        } catch (error) {
+          if (ticket !== sending) return;
+          err.textContent = error.message;
+        }
+        submitBtn.disabled = false;
+        return showImage();
       }
       inner.innerHTML = '<m3-loading></m3-loading>';
       try {
-        model.image = await shrinkImage(file);
-        if (model.image.length > 2_400_000) {
-          model.image = null;
-          err.textContent = 'That image is too big. Try a smaller one.';
+        if (file.type === 'image/gif' && store.state.videos) {
+          if (file.size > 6 * 1024 * 1024) throw Object.assign(new Error('big'), { tooBig: true });
+          model.image = await readGif(file);
+        } else {
+          model.image = await shrinkImage(file);
+          if (model.image.length > 2_400_000) throw Object.assign(new Error('big'), { tooBig: true });
         }
-      } catch (_) {
+      } catch (error) {
         model.image = null;
-        err.textContent = 'Couldn’t read that image.';
+        err.textContent = error.tooBig ? (file.type === 'image/gif' ? 'That GIF is too big. Try one under 6 MB.' : 'That image is too big. Try a smaller one.') : 'Couldn’t read that image.';
       }
       showImage();
     };
     $('#f-file', root).addEventListener('change', (e) => takeFile(e.target.files[0]));
+    // or a GIF from KLIPY's search (1.0): the post keeps KLIPY's link, as a chat does
+    const gifBtn = $('#f-gif', root);
+    if (gifBtn)
+      gifBtn.addEventListener('click', async () => {
+        const g = await Nook.pickers.gif();
+        if (!g) return;
+        sending++;
+        $('#f-submit', root).disabled = false;
+        $('#f-image-err', root).textContent = '';
+        model.image = null;
+        model.video = null;
+        model.gif = g;
+        showImage();
+      });
     drop.addEventListener('dragover', (e) => {
       e.preventDefault();
       drop.classList.add('over');
@@ -2687,7 +2840,7 @@
         .map(
           (text, i) =>
             `<div class="opt"><input class="m3-field" data-opt="${i}" maxlength="80" placeholder="Option ${i + 1}" value="${esc(text)}">` +
-            (model.poll.length > 2 ? `<button type="button" class="m3-icon-btn small" data-drop-opt="${i}" aria-label="Remove option ${i + 1}"><span class="m3-icon">close</span></button>` : '') +
+            (model.poll.length > 2 ? `<button type="button" class="m3-icon-btn small" data-drop-opt="${i}" aria-label="Remove option ${i + 1}"><span translate="no" class="m3-icon">close</span></button>` : '') +
             '</div>'
         )
         .join('');
@@ -2739,7 +2892,7 @@
       const t = title.value.trim();
       if (t.length < 3) fail('#f-title-err', 'Give your post a title (at least 3 characters).', title);
       let link = null;
-      if (model.type === 'image' && !model.image) fail('#f-image-err', 'Add an image, or switch to a text post.', drop);
+      if (model.type === 'image' && !model.image && !model.video && !model.gif) fail('#f-image-err', store.state.videos ? 'Add a picture, GIF or video, or switch to a text post.' : 'Add an image, or switch to a text post.', drop);
       if (model.type === 'link') {
         try {
           const u = new URL(url.value.trim());
@@ -2762,7 +2915,9 @@
       M3.rollText(status, 'Posting…');
       let p;
       try {
-        p = await store.createPost({ n: model.nook.id, title: t, body: body.value.trim(), type: model.type, flair: model.flair, link, image: model.image, poll: options, spoiler: spoiler.checked });
+        const video = model.type === 'image' && model.video;
+        const gif = model.type === 'image' && !video && model.gif;
+        p = await store.createPost({ n: model.nook.id, title: t, body: body.value.trim(), type: video ? 'video' : gif ? 'gif' : model.type, flair: model.flair, link, image: video || gif ? null : model.image, video: video ? video.id : undefined, gif: gif || undefined, poll: options, spoiler: spoiler.checked });
       } catch (error) {
         submitBtn.disabled = false;
         M3.rollText(status, 'Not posted yet');
@@ -2890,7 +3045,8 @@
     // a group's chat only listens for its own news
     if (main._onMessages && route && route.view !== 'groupThread') return main._onMessages(incoming);
     const last = incoming[incoming.length - 1];
-    if (!last) return;
+    // a chat's new colour shows in the chat itself; it isn't news to pop up about
+    if (!last || last.kind === 'theme') return;
     M3.snackbar(`u/${last.from}: ${said(last)}`, { timeout: 6000, action: { label: 'Reply', onClick: () => go('#/messages/' + encodeURIComponent(last.from)) } });
   });
 
@@ -2911,6 +3067,11 @@
   store.on('friends', () => {
     renderBadges();
     if (main._onFriends) main._onFriends();
+  });
+
+  // a chat's colour changed (here, or by the friend on the other end): the chat wears it at once
+  store.on('chatTheme', () => {
+    if (route && route.view === 'thread') render();
   });
 
   store.on('synced', (news) => {
@@ -2983,7 +3144,25 @@
     setTimeout(() => location.replace(location.pathname), 1800);
   });
 
+  // the language you picked on another device (kept with your settings) is the one here too
+  if (Nook.i18n && S().lang && S().lang !== Nook.i18n.lang && Nook.i18n.LANGS[S().lang]) {
+    let tried = false;
+    try {
+      tried = sessionStorage.getItem('nook-lang-followed') === S().lang;
+      sessionStorage.setItem('nook-lang-followed', S().lang);
+    } catch (_) {
+      tried = true;
+    }
+    if (!tried) Nook.i18n.choose(S().lang);
+  }
+
+  // calm mode (1.0): the little bursts of shapes on votes, Sparks and joins stay away too
+  const burstAway = M3.burst;
+  M3.burst = (...args) => (S().calm ? null : burstAway(...args));
+
   store.on('badge', (badge) => {
+    // in calm mode a badge arrives quietly: it's on your profile, with no fanfare
+    if (S().calm) return;
     setTimeout(() => {
       M3.toast(`Badge unlocked: ${badge.name}`, { symbol: badge.symbol, shape: badge.shape, timeout: 3200 });
       fx.confetti({ x: innerWidth / 2, y: innerHeight - (innerWidth < 720 ? 130 : 60) }, { shapes: [badge.shape, badge.shape, 'sunny'], count: 24, power: 0.9 });
@@ -3024,7 +3203,7 @@
   fab.className = 'fab-top';
   fab.setAttribute('aria-label', 'Back to top');
   fab.dataset.tooltip = 'Back to top';
-  fab.innerHTML = '<m3-shape shape="cookie9" aria-hidden="true"></m3-shape><span class="m3-icon" aria-hidden="true">arrow_upward</span>';
+  fab.innerHTML = '<m3-shape shape="cookie9" aria-hidden="true"></m3-shape><span translate="no" class="m3-icon" aria-hidden="true">arrow_upward</span>';
   document.body.appendChild(fab);
   fab.addEventListener('click', () => {
     fx.haptic(8);

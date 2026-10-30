@@ -1,2 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /server/
+
+Sitemap: https://budgiesocial.com/sitemap.xml

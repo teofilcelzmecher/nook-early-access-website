@@ -16,7 +16,7 @@
   const DATA = window.NOOK_DATA;
   const BOOT = window.NOOK_BOOT;
   const ME = '__me__';
-  const VERSION = '0.9.5';
+  const VERSION = '1.0.0';
   const SYNC_EVERY = 15000;
 
   const SPARKS = [
@@ -72,7 +72,7 @@
   const pictures = (u) => ({ photo: api.url(u.photo), photoGif: api.url(u.photoGif), banner: api.url(u.banner), bannerGif: api.url(u.bannerGif) });
   const meFrom = (me) => ({
     name: me.name, color: me.color, shape: me.shape, icon: me.icon || '', bio: me.bio || '', font: me.font || '', ...pictures(me),
-    pronouns: me.pronouns || '', flag: me.flag || '', interests: me.interests || [], scheme: me.scheme || '', sticker: me.sticker || '',
+    pronouns: me.pronouns || '', flag: me.flag || '', flags: me.flags || (me.flag ? [me.flag] : []), interests: me.interests || [], scheme: me.scheme || '', sticker: me.sticker || '',
     joinedAt: me.joinedAt || me.createdAt, role: me.role || 'member', badges: me.badges || [], calls: me.calls || 'on',
   });
 
@@ -102,6 +102,10 @@
     // the people you've blocked (a server without blocking sends no list, and the app offers none)
     blocked: BOOT.blocked || [],
     canBlock: Array.isArray(BOOT.blocked),
+    // whether the server takes videos in posts (from 1.0, when it has ffmpeg)
+    videos: !!BOOT.videos,
+    // the colour picked for each chat with a friend (1.0), by their name in lower case
+    chatThemes: BOOT.chatThemes || {},
   });
   for (const [target, value] of Object.entries(BOOT.mine.votes || {})) (target.startsWith('c') ? state.cvotes : state.votes)[target] = value;
 
@@ -145,6 +149,7 @@
       return;
     }
     if (p.image) p.image = api.url(p.image);
+    if (p.video) p.video = Object.assign({}, p.video, { url: api.url(p.video.url), poster: api.url(p.video.poster) });
     const had = posts.get(p.id);
     if (had) Object.assign(had, p);
     else posts.set(p.id, p);
@@ -508,8 +513,8 @@
     checkBadges();
   }
 
-  async function createPost({ n, title, body, type, flair, link, image, poll, spoiler }) {
-    const { post: p } = await api.post('/api/posts', { n, title, body, type, flair, link: link ? { url: link.url } : null, image, poll, spoiler });
+  async function createPost({ n, title, body, type, flair, link, image, video, gif, poll, spoiler }) {
+    const { post: p } = await api.post('/api/posts', { n, title, body, type, flair, link: link ? { url: link.url } : null, image, video, gif, poll, spoiler });
     ingestPost(p);
     state.votes[p.id] = 1;
     state.draft = null;
@@ -517,6 +522,12 @@
     checkBadges();
     emit('posted', p);
     return p;
+  }
+
+  /** sends a video for a post (it's made ready and checked by the server): { id, url, poster, width, height, duration } */
+  async function uploadVideo(file, onProgress) {
+    const { video } = await api.upload('/api/videos', file, onProgress);
+    return Object.assign({}, video, { url: api.url(video.url), poster: api.url(video.poster) });
   }
 
   async function addOwnComment(postId, parentId, body) {
@@ -630,6 +641,15 @@
   }
 
   // ---- blocking: they can't message, call or befriend you, and what they write is kept out of your way --------------
+
+  /** a chat's colour with a friend (1.0), '' for none */
+  const chatTheme = (name) => state.chatThemes[String(name).toLowerCase()] || '';
+  async function setChatTheme(name, color) {
+    await api.put('/api/chats/' + encodeURIComponent(name) + '/theme', { color });
+    if (color) state.chatThemes[String(name).toLowerCase()] = color;
+    else delete state.chatThemes[String(name).toLowerCase()];
+    emit('chatTheme', name);
+  }
 
   const isBlocked = (name) => !!name && state.blocked.some((n) => n.toLowerCase() === String(name).toLowerCase());
   async function block(name) {
@@ -792,9 +812,10 @@
 
   const report = (kind, id, reason) => api.post('/api/reports', { kind, id, reason });
   const adminReports = () => api.get('/api/admin/reports').then((r) => r.reports);
-  const resolveReport = (id, action, reason) => api.post('/api/admin/resolve', { id, action, reason });
-  async function adminRemove(kind, id, reason) {
-    await api.post('/api/admin/remove', { kind, id, reason });
+  // parts: for a profile, just its 'photo' or 'banner' (from 1.0); none is the whole profile
+  const resolveReport = (id, action, reason, parts) => api.post('/api/admin/resolve', { id, action, reason, parts });
+  async function adminRemove(kind, id, reason, parts) {
+    await api.post('/api/admin/remove', { kind, id, reason, parts });
     removed.add(id);
     if (kind === 'post') posts.delete(id);
   }
@@ -876,6 +897,10 @@
           if (c.removed) news.removed.push(c.id);
         }
         if (d.me) state.me = meFrom(d.me);
+        if (d.chatThemes && JSON.stringify(d.chatThemes) !== JSON.stringify(state.chatThemes)) {
+          state.chatThemes = d.chatThemes;
+          news.chatThemes = true;
+        }
         if (d.blocked && JSON.stringify(d.blocked) !== JSON.stringify(state.blocked)) {
           state.blocked = d.blocked;
           news.blocked = true;
@@ -924,6 +949,7 @@
         emit('synced', news);
         // blocked or unblocked on another device: the page is drawn again without (or with) them
         if (news.blocked) emit('changed');
+        if (news.chatThemes) emit('chatTheme');
       })
       .catch((error) => emit('sync-failed', error))
       .finally(() => (syncing = null));
@@ -939,10 +965,10 @@
     group, groupThread, createGroup, loadGroupThread, sendGroupMessage, markGroupRead, renameGroup, addToGroup, removeFromGroup, leaveGroup, community, allCommunities, post, visiblePosts, comments, commentsById,
     commentCount, score, commentScore, sparks, sparkTotal, pollResults, feed, sortComments, highlights,
     userStats, history, search, membersOf, activity, notifications, isRead, unread, notify, touchStreak, checkBadges, award,
-    vote, voteComment, react, votePoll, join, toggleSave, hide, visit, createPost,
+    vote, voteComment, react, votePoll, join, toggleSave, hide, visit, createPost, uploadVideo,
     addOwnComment, editComment, remove, isRemoved, createCommunity, createCollection, collect, updateProfile,
     markRead, signOut, changePassword, newRecoveryCode, exportData, deleteAccount,
-    friendStatus, friends, befriend, unfriend, isBlocked, block, unblock, thread, conversation, unreadMessages, loadThread, sendMessage, markThreadRead,
+    friendStatus, friends, befriend, unfriend, isBlocked, block, unblock, chatTheme, setChatTheme, thread, conversation, unreadMessages, loadThread, sendMessage, markThreadRead,
     NEST_PERMS, NEST_ROLES, ROLE_LABELS, nestPerms, nestCan, nestRole, bannedFrom, manageNest, setNestRole, removeNestRole, editNest, banFromNest, unbanFromNest,
     dismissNestReport, pinPost, nestRemove,
     report, adminReports, resolveReport, adminRemove, ban, sync,

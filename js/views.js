@@ -35,7 +35,7 @@
   }
 
   const compactToggle = () =>
-    `<button class="m3-icon-btn tonal not-phone" data-act="compact" aria-pressed="${settings().compact}" aria-label="Compact cards" data-tooltip="Compact cards"><span class="m3-icon">view_agenda</span></button>`;
+    `<button class="m3-icon-btn tonal not-phone" data-act="compact" aria-pressed="${settings().compact}" aria-label="Compact cards" data-tooltip="Compact cards"><span translate="no" class="m3-icon">view_agenda</span></button>`;
 
   function empty(symbol, title, description, actions = '', shape = '') {
     return (
@@ -57,9 +57,9 @@
     const act = kind === 'post' ? 'vote' : 'cvote';
     return (
       `<div class="vote${small ? ' small' : ''}" data-dir="${dir || ''}" data-${kind}-id="${id}">` +
-      `<button class="m3-icon-btn up" data-act="${act}" data-dir="1" data-effect="bounce" aria-pressed="${dir === 1}" aria-label="Upvote"><span class="m3-icon">shift</span></button>` +
+      `<button class="m3-icon-btn up" data-act="${act}" data-dir="1" data-effect="bounce" aria-pressed="${dir === 1}" aria-label="Upvote"><span translate="no" class="m3-icon">shift</span></button>` +
       `<span class="score">${num(score)}</span>` +
-      `<button class="m3-icon-btn down" data-act="${act}" data-dir="-1" data-effect="bounce" aria-pressed="${dir === -1}" aria-label="Downvote"><span class="m3-icon">shift</span></button>` +
+      `<button class="m3-icon-btn down" data-act="${act}" data-dir="-1" data-effect="bounce" aria-pressed="${dir === -1}" aria-label="Downvote"><span translate="no" class="m3-icon">shift</span></button>` +
       '</div>'
     );
   }
@@ -96,7 +96,18 @@
   }
 
   function art(p, size) {
-    if (p.image) return `<div class="post-art photo"><img src="${esc(p.image)}" alt="${esc(p.title)}" loading="lazy"></div>`;
+    // a video (1.0): its still until it's played; nothing loads before then
+    if (p.video) {
+      const v = p.video;
+      return `<div class="post-art video" style="--ratio:${v.width || 16}/${v.height || 9}"><video src="${esc(v.url)}" poster="${esc(v.poster)}" controls playsinline preload="none" aria-label="Video: ${esc(p.title)}"></video></div>`;
+    }
+    // a GIF found with KLIPY's search (1.0): loaded from KLIPY, and still when motion is reduced
+    if (p.gif) {
+      const g = p.gif;
+      const shape = g.width && g.height ? ` style="aspect-ratio:${g.width}/${g.height}"` : '';
+      return `<div class="post-art photo gif"><img src="${esc(ui.motionOff() && g.still ? g.still : g.url)}" alt="${esc(g.title || p.title)}" translate="no" loading="lazy" referrerpolicy="no-referrer"${shape}><span class="gif-tag">GIF</span></div>`;
+    }
+    if (p.image) return `<div class="post-art photo"><img src="${esc(p.image)}" alt="${esc(p.title)}" translate="no" loading="lazy"></div>`;
     if (!p.art) return '';
     const a = p.art;
     return (
@@ -106,6 +117,8 @@
   }
 
   function thumb(p) {
+    if (p.video) return `<div class="post-thumb video"><img src="${esc(p.video.poster)}" alt="" loading="lazy">${icon('play_circle')}</div>`;
+    if (p.gif) return `<div class="post-thumb gif"><img src="${esc(p.gif.still || p.gif.url)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="gif-tag">GIF</span></div>`;
     if (p.image) return `<div class="post-thumb"><img src="${esc(p.image)}" alt="" loading="lazy"></div>`;
     if (p.art) return `<div class="post-thumb" style="--a1:${p.art.from};--a2:${p.art.to};--ang:${p.art.angle || 150}deg">${icon(p.art.symbol)}</div>`;
     const symbol = p.type === 'link' ? 'link' : p.type === 'poll' ? 'ballot' : 'notes';
@@ -141,7 +154,7 @@
       `<span class="dot"></span><time datetime="${when.toISOString()}" title="${esc(when.toLocaleString())}">${ago(p.createdAt)}</time>` +
       (p.pinned && (inNook || open) ? `<span class="tag pin">${icon('push_pin')}Pinned</span>` : '') +
       (p.spoiler ? `<span class="tag">${icon('visibility_off')}Spoiler</span>` : '') +
-      `<button class="m3-icon-btn small post-more" data-act="post-menu" aria-label="More options"><span class="m3-icon">more_horiz</span></button>` +
+      `<button class="m3-icon-btn small post-more" data-act="post-menu" aria-label="More options"><span translate="no" class="m3-icon">more_horiz</span></button>` +
       '</header>';
 
     const title =
@@ -171,7 +184,7 @@
       `<button class="m3-btn tonal act" data-act="spark-picker" aria-label="Add a Spark" data-tooltip="Spark it">${icon('add_reaction')}<span class="label-wide">Spark</span></button>` +
       `<button class="m3-btn tonal act" data-act="share" aria-label="Share">${icon('ios_share')}<span class="label-wide">Share</span></button>` +
       '<span class="spacer"></span>' +
-      `<button class="m3-icon-btn" data-act="save" data-burst="pin" aria-pressed="${saved}" aria-label="Save" data-tooltip="${saved ? 'Saved' : 'Save'}"><span class="m3-icon">bookmark</span></button>` +
+      `<button class="m3-icon-btn" data-act="save" data-burst="pin" aria-pressed="${saved}" aria-label="Save" data-tooltip="${saved ? 'Saved' : 'Save'}"><span translate="no" class="m3-icon">bookmark</span></button>` +
       '</footer>';
 
     const tint = !inNook ? ` data-tint="${c.color}"` : '';
@@ -309,6 +322,8 @@
   }
 
   function streakCard() {
+    // calm mode (1.0): no streak to keep up
+    if (store.state.settings.calm) return '';
     const s = store.state.streak;
     const milestones = [3, 7, 14, 30, 100, 365];
     const next = milestones.find((m) => m > s.count) || s.count + 1;
@@ -369,7 +384,7 @@
       `<div class="c-side">${avatar(removed ? ghost : u, 30)}<button class="c-thread" data-act="collapse" aria-label="Collapse this thread"></button></div>` +
       '<div class="c-main">' +
       '<div class="c-head">' +
-      (removed ? '<span>[deleted]</span>' : `<a class="author${nameFont(u)}" href="#/u/${esc(name)}">${esc(name)}</a>${prideFlag(u)}${devTag(u)}${roleTag((store.post(c.postId) || {}).n, name)}`) +
+      (removed ? '<span>[deleted]</span>' : `<a class="author${nameFont(u)}" href="#/u/${esc(name)}" translate="no">${esc(name)}</a>${prideFlag(u)}${devTag(u)}${roleTag((store.post(c.postId) || {}).n, name)}`) +
       (!removed && op ? '<span class="tag op">OP</span>' : '') +
       (!removed && mine ? '<span class="tag">You</span>' : '') +
       `<span>· ${ago(c.createdAt)}</span>${c.edited && !removed ? '<span>· edited</span>' : ''}<span class="c-hidden"></span></div>` +
@@ -380,7 +395,7 @@
           voteBox('comment', c.id, store.commentScore(c), dir, true) +
           `<button class="m3-btn text" data-act="reply">${icon('reply')}Reply</button>` +
           `<button class="m3-btn text" data-act="comment-share" aria-label="Share">${icon('ios_share')}<span class="not-phone">Share</span></button>` +
-          `<button class="m3-icon-btn small" data-act="comment-menu" aria-label="More options for this comment"><span class="m3-icon">more_horiz</span></button>` +
+          `<button class="m3-icon-btn small" data-act="comment-menu" aria-label="More options for this comment"><span translate="no" class="m3-icon">more_horiz</span></button>` +
           '</div>') +
       '<div class="c-reply"></div></div>' +
       (kids ? `<div class="c-children">${kids}</div>` : '') +
@@ -426,7 +441,7 @@
       `<section class="highlights" id="highlights" data-m3-stickers="hl-${p.id}" data-count="3" data-min="50" data-max="110" data-clip-radius="23">` +
       `<div class="hl-head"><m3-shape-icon shape="softBurst" symbol="auto_awesome" size="40" icon-size="20" style="--m3-shape-icon-color:var(--m3-secondary);--m3-shape-icon-on-color:var(--m3-on-secondary)"></m3-shape-icon>` +
       `<div><b class="m3-title" style="font-size:var(--m3-fs-large)">Catch me up</b><small>${plural(h.total, 'comment')} from ${plural(h.people, 'person', 'people')}, boiled down</small></div>` +
-      `<button class="m3-icon-btn small" data-act="hide-highlights" aria-label="Hide highlights"><span class="m3-icon">close</span></button></div>` +
+      `<button class="m3-icon-btn small" data-act="hide-highlights" aria-label="Hide highlights"><span translate="no" class="m3-icon">close</span></button></div>` +
       '<ol>' +
       h.top.map((c, i) => item(c, i === 0 ? 'Top comment' : 'Also loved')).join('') +
       (h.op ? item(h.op, 'The poster said') : '') +
@@ -439,12 +454,13 @@
   function home() {
     const s = store.state;
     const name = s.me.name;
+    // a short hello until it's put away (1.0: one line and two small buttons, so the feed starts near the top)
     const hello = !s.tourDone
-      ? `<section class="hello" data-m3-stickers="hello-${name}" data-count="5" data-strength="1.3" data-clip-radius="30">` +
-        `<button class="m3-icon-btn close" data-act="dismiss-hello" aria-label="Dismiss welcome"><span class="m3-icon">close</span></button>` +
-        `<h1 class="m3-title">Welcome to Budgie, ${esc(name)}!</h1>` +
-        '<p>Every nest has its own colour and shape, and the app wears them as you move around. Join a few and Spark what you love.<span class="not-phone"> Press <kbd>?</kbd> for shortcuts.</span></p>' +
-        `<div class="row"><button class="m3-btn filled" data-act="about-nook">${icon('tour')}What’s Budgie?</button><a class="m3-btn tonal" href="#/explore">${icon('explore')}Find your nests</a></div></section>`
+      ? `<section class="hello" data-m3-stickers="hello-${name}" data-count="4" data-strength="1.1" data-clip-radius="28">` +
+        `<button class="m3-icon-btn close" data-act="dismiss-hello" aria-label="Dismiss welcome"><span translate="no" class="m3-icon">close</span></button>` +
+        `<h1 class="m3-title">Welcome, ${esc(name)}!</h1>` +
+        '<p>Join a few nests and Spark what you love.</p>' +
+        `<div class="row"><a class="m3-btn filled small" href="#/explore">${icon('explore')}Find your nests</a><button class="m3-btn tonal small" data-act="about-nook">${icon('tour')}What’s Budgie?</button></div></section>`
       : '';
     return {
       title: 'Home',
@@ -453,13 +469,13 @@
         '<div class="page"><div class="col">' +
         hello +
         `<div class="composer">${avatar(store.user(store.ME), 40)}<a class="fake-input" href="#/submit" role="button"><span class="not-phone">What’s on your mind, ${esc(name)}?</span><span class="only-phone">Share something…</span></a>` +
-        `<a class="m3-icon-btn" href="#/submit?type=image" aria-label="Post an image" data-tooltip="Image"><span class="m3-icon">image</span></a>` +
-        `<a class="m3-icon-btn" href="#/submit?type=poll" aria-label="Start a poll" data-tooltip="Poll"><span class="m3-icon">ballot</span></a></div>` +
+        `<a class="m3-icon-btn" href="#/submit?type=image" aria-label="Post an image" data-tooltip="Image"><span translate="no" class="m3-icon">image</span></a>` +
+        `<a class="m3-icon-btn" href="#/submit?type=poll" aria-label="Start a poll" data-tooltip="Poll"><span translate="no" class="m3-icon">ballot</span></a></div>` +
         `<div class="toolbar">${sortControl(s.settings.sort)}<span class="spacer"></span>${compactToggle()}</div>` +
         feedShell() +
+        // the side: a few nests to try, and the small print (the streak lives on your profile)
         '</div><aside class="rail" aria-label="Sidebar">' +
-        streakCard() +
-        trendingCard() +
+        trendingCard(3) +
         footCard() +
         '</aside></div>',
       mount(root) {
@@ -524,11 +540,11 @@
         `<section class="nook-hero" data-m3-stickers="${c.id}" data-count="6" data-min="50" data-max="170" data-strength="1.3" data-clip-radius="30">` +
         '<div class="nook-hero-main">' +
         `<m3-shape-icon class="nook-avatar" shape="${c.shape}" hover-shape="${c.shape === 'heart' ? 'flower' : 'heart'}" symbol="${c.symbol}" size="104" icon-size="48"></m3-shape-icon>` +
-        `<div class="nook-id"><h1 class="m3-title">${esc(c.title)}</h1><span class="muted">n/${esc(c.id)}<span class="count"> · ${plural(store.activity(c).posts, 'post')}</span></span></div>` +
+        `<div class="nook-id"><h1 class="m3-title" translate="no">${esc(c.title)}</h1><span class="muted">n/${esc(c.id)}<span class="count"> · ${plural(store.activity(c).posts, 'post')}</span></span></div>` +
         `<div class="nook-hero-actions">${joinButton(c, false)}` +
         (store.nestPerms(c).length && serverAt('0.9.5') ? `<a class="m3-icon-btn tonal" href="#/n/${esc(c.id)}/manage" aria-label="Manage n/${esc(c.id)}" data-tooltip="Manage">${icon('tune')}</a>` : '') +
-        `<button class="m3-icon-btn tonal" data-act="nook-menu" data-nook="${c.id}" aria-label="More" data-tooltip="More"><span class="m3-icon">more_horiz</span></button></div></div>` +
-        `<p class="nook-tagline">${esc(c.tagline)}</p>` +
+        `<button class="m3-icon-btn tonal" data-act="nook-menu" data-nook="${c.id}" aria-label="More" data-tooltip="More"><span translate="no" class="m3-icon">more_horiz</span></button></div></div>` +
+        `<p class="nook-tagline" translate="no">${esc(c.tagline)}</p>` +
         pulse(c) +
         '</section>' +
         bannedNote(c) +
@@ -579,7 +595,7 @@
       brand: c.shape,
       html:
         '<div class="page"><div class="col">' +
-        `<div class="back-row"><button class="m3-toolbar-btn" data-act="back" data-effect="nudge-left" data-shape="cookie7" data-shape-still aria-label="Back" data-tooltip="Back"><span class="m3-icon">arrow_back</span></button>` +
+        `<div class="back-row"><button class="m3-toolbar-btn" data-act="back" data-effect="nudge-left" data-shape="cookie7" data-shape-still aria-label="Back" data-tooltip="Back"><span translate="no" class="m3-icon">arrow_back</span></button>` +
         `<a class="nook-link" href="#/n/${c.id}" style="display:flex;align-items:center;gap:8px;font-weight:700">${nookIcon(c, 28, 16)}n/${esc(c.id)}</a></div>` +
         postCard(p, { open: true, nook: p.n }) +
         highlightsCard(p) +
@@ -630,8 +646,8 @@
           ([c, a]) =>
             `<article class="nook-card" data-tint="${c.color}" data-tint-always data-href="#/n/${c.id}" data-m3-ripple data-m3-bounce data-m3-hover-root tabindex="0" aria-label="${esc(c.title)}, n/${esc(c.id)}" data-m3-stickers="card-${c.id}" data-count="3" data-min="60" data-max="130" data-clip-radius="23">` +
             `<div class="nc-top"><m3-shape-icon shape="${c.shape}" symbol="${c.symbol}" size="56" icon-size="28"></m3-shape-icon>${joinButton(c)}</div>` +
-            `<h3 class="m3-title">${esc(c.title)}</h3><div class="meta">n/${esc(c.id)}<span class="count"> · ${a.posts ? plural(a.posts, 'post') : 'no posts yet'}</span></div>` +
-            `<p>${esc(c.tagline)}</p><m3-wavy-progress value="${a.level}"${a.week ? ' playing' : ''} aria-label="Activity: ${a.mood}"></m3-wavy-progress></article>`
+            `<h3 class="m3-title" translate="no">${esc(c.title)}</h3><div class="meta">n/${esc(c.id)}<span class="count"> · ${a.posts ? plural(a.posts, 'post') : 'no posts yet'}</span></div>` +
+            `<p translate="no">${esc(c.tagline)}</p><m3-wavy-progress value="${a.level}"${a.week ? ' playing' : ''} aria-label="Activity: ${a.mood}"></m3-wavy-progress></article>`
         )
         .join('');
     return {
@@ -706,9 +722,9 @@
       brand: col.shape,
       html:
         '<div class="page single"><div class="col">' +
-        `<div class="back-row"><a class="m3-toolbar-btn" href="#/saved" data-effect="nudge-left" data-shape="cookie7" data-shape-still aria-label="Back to saved"><span class="m3-icon">arrow_back</span></a></div>` +
+        `<div class="back-row"><a class="m3-toolbar-btn" href="#/saved" data-effect="nudge-left" data-shape="cookie7" data-shape-still aria-label="Back to saved"><span translate="no" class="m3-icon">arrow_back</span></a></div>` +
         `<div class="page-head"><m3-shape-icon shape="${col.shape}" symbol="collections_bookmark" size="56" icon-size="28" style="--m3-shape-icon-color:${col.color};--m3-shape-icon-on-color:${ui.ink(col.color)}"></m3-shape-icon>` +
-        `<div><h1 class="m3-title">${esc(col.name)}</h1><span class="muted">${plural(list.length, 'post')}</span></div><span class="spacer"></span>` +
+        `<div><h1 class="m3-title" translate="no">${esc(col.name)}</h1><span class="muted">${plural(list.length, 'post')}</span></div><span class="spacer"></span>` +
         `<button class="m3-btn tonal small" data-act="rename-collection" data-col="${col.id}">${icon('edit')}Rename</button>` +
         `<button class="m3-btn text small" data-act="delete-collection" data-col="${col.id}">${icon('delete')}Delete</button></div>` +
         feedShell() +
@@ -757,7 +773,7 @@
       ? `<section class="section"><header class="m3-section-header" data-m3-hover-root><m3-shape-icon shape="burst" symbol="military_tech" size="34" icon-size="18"></m3-shape-icon><h2 class="m3-title">Badges</h2><m3-wavy-line></m3-wavy-line><span class="muted">${Object.keys(s.badges).length}/${store.BADGES.length}</span></header>` +
         `<div class="badges">${store.BADGES.map((b) => {
           const got = !!s.badges[b.id];
-          return `<div class="badge-tile${got ? '' : ' locked'}" data-tooltip="${esc(b.desc)}"><m3-shape-icon shape="${b.shape}" symbol="${got ? b.symbol : 'lock'}" size="52" icon-size="24"></m3-shape-icon><b>${esc(b.name)}</b><small>${esc(b.desc)}</small></div>`;
+          return `<div class="badge-tile${got ? '' : ' locked'}" data-tooltip="${esc(b.desc)}"><m3-shape-icon shape="${b.shape}" symbol="${got ? b.symbol : 'lock'}" size="52" icon-size="24"></m3-shape-icon><b translate="no">${esc(b.name)}</b><small>${esc(b.desc)}</small></div>`;
         }).join('')}</div></section>`
       : '';
     const banner = ui.bannerImage(u);
@@ -775,7 +791,7 @@
         (banner
           ? `<section class="profile-hero has-banner"><div class="profile-banner">${banner}</div>`
           : `<section class="profile-hero"${stickers}>`) +
-        `<div class="profile-main">${avatar(u, 96, { moving: true })}<div class="who"><h1 class="m3-title${who.flag ? ' has-flag' : ''}" style="--name-len: ${u.name.length}"><span class="${nameFont(who).trim()}">${esc(u.name)}</span>${prideFlag(who)}</h1>` +
+        `<div class="profile-main">${avatar(u, 96, { moving: true })}<div class="who"><h1 class="m3-title${who.flag ? ' has-flag' : ''}" style="--name-len: ${u.name.length}"><span class="${nameFont(who).trim()}" translate="no">${esc(u.name)}</span>${prideFlag(who)}</h1>` +
         `<span class="muted">u/${esc(u.name)}${who.pronouns ? ` · <span class="pronouns">${esc(who.pronouns)}</span>` : ''} · joined ${joinedDays <= 1 ? 'today' : plural(joinedDays, 'day') + ' ago'}${u.admin ? ' · <span class="tag">Admin</span>' : ''}${u.banned ? ' · <span class="tag">Banned</span>' : ''}</span>` +
         specialBadges(who) +
         (u.bio ? `<div class="md bio">${md(clean(u.bio))}</div>` : me ? '<p class="muted bio">No bio yet. Tell people what you’re into!</p>' : '') +
@@ -787,14 +803,17 @@
           ? ''
           : store.isBlocked(u.name)
           ? `<div class="toolbar profile-actions"><button class="m3-btn tonal" data-act="unblock" data-user="${esc(u.name)}">${icon('lock_open')}Unblock</button></div><p class="muted blocked-note">${icon('block')}You blocked u/${esc(u.name)}. They can’t message you, call you or add you, and their posts and comments are hidden from you.</p>`
-          : `<div class="toolbar profile-actions">${friendButtons(u.name)}${store.isDev() ? testerButton(u) : ''}<button class="m3-icon-btn tonal" data-act="report-user" data-user="${esc(u.name)}" aria-label="Report u/${esc(u.name)}" data-tooltip="Report">${icon('flag')}</button>` +
-            (store.state.canBlock ? `<button class="m3-icon-btn tonal" data-act="block" data-user="${esc(u.name)}" aria-label="Block u/${esc(u.name)}" data-tooltip="Block">${icon('block')}</button>` : '') +
+          : `<div class="toolbar profile-actions">${friendButtons(u.name)}${store.isDev() ? testerButton(u) : ''}` +
+            // Report and Block, under one button so the row fits a phone
+            (store.state.canBlock
+              ? `<button class="m3-icon-btn tonal" data-act="person-menu" data-user="${esc(u.name)}" aria-label="More for u/${esc(u.name)}: report or block" data-tooltip="Report or block">${icon('more_vert')}</button>`
+              : `<button class="m3-icon-btn tonal" data-act="report-user" data-user="${esc(u.name)}" aria-label="Report u/${esc(u.name)}" data-tooltip="Report">${icon('flag')}</button>`) +
             '</div>') +
         '</div><div class="stats">' +
         `<div class="stat" title="Every upvote on their posts and comments is a feather"><b class="count">${num(st.feathers)}</b><span>Feathers</span></div>` +
         `<div class="stat"><b class="count">${num(st.posts.length)}</b><span>Posts</span></div>` +
         `<div class="stat"><b class="count">${num(st.comments.length)}</b><span>Comments</span></div>` +
-        (me ? `<div class="stat"><b>${plural(s.streak.count, 'day')}</b><span>Streak</span></div>` : '') +
+        (me && !s.settings.calm ? `<div class="stat"><b>${plural(s.streak.count, 'day')}</b><span>Streak</span></div>` : '') +
         '</div></section>' +
         badges +
         `<div class="toolbar">${segmented('profile-tab', [['posts', 'Posts', 'article'], ['comments', 'Comments', 'forum']], 'posts', 'Show')}</div>` +
@@ -805,7 +824,7 @@
         (me ? streakCard() : '') +
         (where.length
           ? `<section class="card"><h3 class="card-title">${icon('location_on')}<span>${me ? 'Where you hang out' : 'Hangs out in'}</span></h3><div class="list">${where
-              .map((c) => `<a class="row-link" href="#/n/${c.id}" data-m3-ripple>${nookIcon(c, 32, 17)}<span class="row-text"><b>n/${esc(c.id)}</b><small>${esc(c.title)}</small></span></a>`)
+              .map((c) => `<a class="row-link" href="#/n/${c.id}" data-m3-ripple>${nookIcon(c, 32, 17)}<span class="row-text"><b>n/${esc(c.id)}</b><small translate="no">${esc(c.title)}</small></span></a>`)
               .join('')}</div></section>`
           : '') +
         footCard() +
@@ -917,6 +936,12 @@
         '<div class="page single"><div class="col settings">' +
         `<div class="page-head"><m3-shape-icon shape="gem" symbol="settings" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Settings</h1><span class="muted">Make Budgie yours. Changes save as you go.</span></div></div>` +
         `<section>${header('flower', 'palette', 'Appearance')}<div class="card setting-card">` +
+        // the app's language (1.0), each named in its own language
+        (Nook.i18n
+          ? `<div class="setting-row"><label class="label" for="set-lang">Language</label><select class="m3-field lang-select" id="set-lang" data-no-i18n translate="no">${Object.entries(Nook.i18n.LANGS)
+              .map(([code, name]) => `<option value="${code}"${code === Nook.i18n.lang ? ' selected' : ''}>${name}</option>`)
+              .join('')}</select></div>`
+          : '') +
         `<div class="setting-row"><span class="label">Mode</span>${segmented('set-mode', [['system', 'System', 'brightness_auto'], ['light', 'Light', 'light_mode'], ['dark', 'Dark', 'dark_mode']], s.mode, 'Mode')}</div>` +
         `<div class="setting-row"><span class="label">Your colour (used outside nests)</span><div class="swatches" id="set-seeds">${ui.SEEDS.map(
           (seed, i) => `<button class="swatch" data-seed="${seed}" aria-pressed="${seed === s.seed}" aria-label="Colour ${seed}" data-tooltip="${seed}"><m3-shape shape="${ui.SEED_SHAPES[i]}" style="color:${seed}"></m3-shape></button>`
@@ -932,7 +957,7 @@
         `<section>${header('cookie9', 'dynamic_feed', 'Feed')}<div class="card setting-card">` +
         `<div class="setting-row"><span class="label">Default sort on Home</span>${segmented('set-sort', ['hot', 'new', 'top', 'rising'].map((k) => [k, SORT_LABELS[k][0], SORT_LABELS[k][1]]), s.sort, 'Default sort')}</div>` +
         sw('set-compact', 'Compact cards', 'Smaller posts with thumbnails, so you see more at once.', s.compact) +
-        sw('set-calm', 'Calm mode', 'Hide every score, count and tally. Votes still count, you just don’t see them.', s.calm) +
+        sw('set-calm', 'Calm mode', 'Hide every score, count, tally and streak, show new things as a dot instead of a number, and skip the confetti. Votes still count, you just don’t see them.', s.calm) +
         sw('set-filterLanguage', 'Hide strong language', 'Swear words show as dots, like f•••. Slurs and threats are never allowed at all.', s.filterLanguage !== false) +
         '</div></section>' +
         `<section>${header('heart', 'self_improvement', 'Wellbeing')}<div class="card setting-card">` +
@@ -971,7 +996,7 @@
         '</div>' +
         '</div></section>' +
         `<section>${header('sunny', 'info', 'About')}<div class="card setting-card">` +
-        `<div class="about-app"><m3-shape-icon shape="cookie9" symbol="diversity_3" size="56" icon-size="28"></m3-shape-icon><div><b class="m3-title">Budgie</b><span class="muted">Version ${esc(store.VERSION)} · Early access</span></div></div>` +
+        `<div class="about-app"><m3-shape-icon shape="cookie9" symbol="diversity_3" size="56" icon-size="28"></m3-shape-icon><div><b class="m3-title">Budgie</b><span class="muted">Version ${esc(store.VERSION)}</span></div></div>` +
         `<div class="toolbar"><button class="m3-btn filled" data-act="credits">${icon('stars')}Credits</button><button class="m3-btn tonal" data-act="about-nook">${icon('help')}What’s Budgie?</button></div>` +
         `<p class="muted">Built on a Material 3 Expressive design system ported from Swiftify. Shapes and morphing from rounded-polygon-qmljs (Apache 2.0); colour from Google’s material-color-utilities (Apache 2.0); type in Google Sans Flex and Material Symbols. <a class="md" style="color:var(--m3-primary)" href="m3/index.html">See the design system</a>.</p>` +
         '</div></section>' +
@@ -1011,6 +1036,15 @@
           $('#set-' + key).addEventListener('change', (e) => {
             s[key] = e.target.checked;
             apply();
+          });
+        }
+        // a new language: kept with your settings (so your other devices follow) and the page starts again in it
+        const langPick = $('#set-lang');
+        if (langPick) {
+          langPick.addEventListener('change', () => {
+            s.lang = langPick.value;
+            store.save();
+            setTimeout(() => Nook.i18n.choose(langPick.value), 300);
           });
         }
         const tone = $('#set-ringtone');
@@ -1062,11 +1096,17 @@
         `<div class="page-head"><m3-shape-icon shape="sunny" symbol="edit" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Create a post</h1><span class="muted">Drafts save themselves as you type</span></div></div>` +
         '<form class="card form" id="submit-form" novalidate>' +
         `<div class="field"><span class="field-label">Posting in</span><button type="button" class="picker-btn" id="nook-picker" aria-haspopup="menu">${nookIcon(nook, 32, 18)}<span id="nook-picker-name">n/${esc(nook.id)}</span>${icon('expand_more')}</button></div>` +
-        `<div>${segmented('post-type', [['text', 'Text', 'notes'], ['image', 'Image', 'image'], ['link', 'Link', 'link'], ['poll', 'Poll', 'ballot']], type, 'Post type')}</div>` +
+        // a picture or GIF, or (when the server takes them, from 1.0) a video
+        `<div>${segmented('post-type', [['text', 'Text', 'notes'], ['image', s.videos ? 'Media' : 'Image', s.videos ? 'perm_media' : 'image'], ['link', 'Link', 'link'], ['poll', 'Poll', 'ballot']], type === 'video' ? 'image' : type, 'Post type')}</div>` +
         `<div class="field"><label for="f-title">Title</label><input class="m3-field" id="f-title" maxlength="300" required placeholder="An interesting title" value="${esc(draft.title || '')}"><span class="counter" id="f-title-count">0/300</span><span class="error" id="f-title-err"></span></div>` +
         `<div class="field"><span class="field-label">Flair</span><div class="chips" id="f-flairs" role="group" aria-label="Flair"></div></div>` +
         // image
-        `<div class="field" data-for="image"><span class="field-label">Image</span><label class="drop" id="f-drop"><input type="file" id="f-file" accept="image/*" hidden><span id="f-drop-inner"><m3-shape-icon shape="clover8" symbol="add_photo_alternate" size="56" icon-size="28"></m3-shape-icon><br>Drop an image here, or click to choose one</span></label><span class="error" id="f-image-err"></span></div>` +
+        `<div class="field" data-for="image"><span class="field-label">${s.videos ? 'A picture, GIF or video' : 'Image'}</span><label class="drop" id="f-drop"><input type="file" id="f-file" accept="${s.videos ? 'image/*,video/*' : 'image/*'}" hidden><span id="f-drop-inner"><m3-shape-icon shape="clover8" symbol="${s.videos ? 'perm_media' : 'add_photo_alternate'}" size="56" icon-size="28"></m3-shape-icon><br>${
+          s.videos ? 'Drop a picture, GIF or video here, or click to choose one<br><small class="muted">Videos up to a minute. Everything is checked automatically.</small>' : 'Drop an image here, or click to choose one'
+        }</span></label>` +
+        // or a GIF from KLIPY's search (1.0), when the server has it switched on
+        (Nook.pickers && Nook.pickers.gifsOn() && serverAt('1.0.0') ? `<button type="button" class="m3-btn tonal small" id="f-gif" style="justify-self:start">${icon('gif_box')}Find a GIF</button>` : '') +
+        '<span class="error" id="f-image-err"></span></div>' +
         // link
         `<div class="field" data-for="link"><label for="f-url">Link</label><input class="m3-field" id="f-url" type="url" placeholder="https://" value="${esc(draft.url || '')}"><span class="error" id="f-url-err"></span></div>` +
         // poll
@@ -1075,7 +1115,7 @@
         `<div class="field"><div class="toolbar" style="justify-content:space-between"><label for="f-body" class="field-label">Body <span class="muted" id="f-body-optional">(optional)</span></label>${segmented('body-mode', [['write', 'Write'], ['preview', 'Preview']], 'write', 'Body mode')}</div>` +
         '<div id="f-write"><div class="format-bar" role="toolbar" aria-label="Formatting">' +
         [['bold', 'format_bold', '**', '**'], ['italic', 'format_italic', '*', '*'], ['code', 'code', '`', '`'], ['link', 'link', '[', '](https://)'], ['quote', 'format_quote', '> ', ''], ['list', 'format_list_bulleted', '- ', ''], ['spoiler', 'visibility_off', '||', '||']]
-          .map(([name, sym, a, b]) => `<button type="button" class="m3-icon-btn small" data-wrap-a="${esc(a)}" data-wrap-b="${esc(b)}" aria-label="${name}" data-tooltip="${name[0].toUpperCase() + name.slice(1)}"><span class="m3-icon">${sym}</span></button>`)
+          .map(([name, sym, a, b]) => `<button type="button" class="m3-icon-btn small" data-wrap-a="${esc(a)}" data-wrap-b="${esc(b)}" aria-label="${name}" data-tooltip="${name[0].toUpperCase() + name.slice(1)}"><span translate="no" class="m3-icon">${sym}</span></button>`)
           .join('') +
         `</div><textarea class="m3-field" id="f-body" rows="7" placeholder="Say more (optional). Markdown-lite works: **bold**, *italic*, lists, > quotes.">${esc(draft.body || '')}</textarea></div>` +
         '<div id="f-preview" class="preview-box md" hidden></div></div>' +
@@ -1161,12 +1201,12 @@
       const u = store.user(c.with);
       return (
         `<a class="row-link convo${c.unread ? ' unread' : ''}" href="#/messages/${encodeURIComponent(u.name)}" data-m3-ripple data-m3-hover-root>${avatar(u, 48)}` +
-        `<span class="row-text"><b>${esc(u.name)}</b><small>${esc(preview(c.last))}</small></span>${meta(c.last, c.unread)}</a>`
+        `<span class="row-text"><b translate="no">${esc(u.name)}</b><small>${esc(preview(c.last))}</small></span>${meta(c.last, c.unread)}</a>`
       );
     };
     const groupRow = (g) =>
       `<a class="row-link convo group-convo${g.unread ? ' unread' : ''}" href="#/messages/g/${encodeURIComponent(g.id)}" data-m3-ripple data-m3-hover-root>${groupIcon(g, 48)}` +
-      `<span class="row-text"><b>${esc(g.name)}</b><small>${esc(preview(g.last, true) || plural(g.members.length, 'member'))}</small></span>${meta(g.last, g.unread)}</a>`;
+      `<span class="row-text"><b translate="no">${esc(g.name)}</b><small>${esc(preview(g.last, true) || plural(g.members.length, 'member'))}</small></span>${meta(g.last, g.unread)}</a>`;
     // chats with one friend and group chats, newest news first
     const chats = [
       ...convos.map((c) => ({ at: c.last ? c.last.createdAt : 0, html: () => row(c) })),
@@ -1235,6 +1275,7 @@
   function lineText(m, inGroup = false) {
     const d = lineData(m);
     const who = m.mine ? 'You' : m.from ? 'u/' + m.from : 'Someone';
+    if (m.kind === 'theme') return d.color ? `${who} changed the chat’s colour` : `${who} set the chat back to its usual colours`;
     if (m.kind === 'call') {
       const kind = d.media === 'video' ? 'video call' : 'voice call';
       if (inGroup) return `${who} started a ${kind} · ${d.missed ? 'nobody joined' : duration(d.secs)}`;
@@ -1261,6 +1302,7 @@
   }
   function lineIcon(m) {
     const d = lineData(m);
+    if (m.kind === 'theme') return 'palette';
     if (m.kind === 'call') return d.missed && !m.mine ? (d.media === 'video' ? 'missed_video_call' : 'call_missed') : d.media === 'video' ? 'videocam' : 'call';
     return { created: 'groups', added: 'person_add', removed: 'person_remove', left: 'logout', renamed: 'edit', owner: 'shield_person' }[d.type] || 'info';
   }
@@ -1355,7 +1397,7 @@
     // in a group, each run says who it's from
     const sender = g.mine ? null : inGroup ? store.user(g.who) : them;
     const face = sender ? `<a class="msg-avatar" href="#/u/${encodeURIComponent(sender.name)}" aria-label="u/${esc(sender.name)}">${avatar(sender, 28)}</a>` : '';
-    const name = inGroup && sender ? `<a class="msg-name${nameFont(sender)}" href="#/u/${encodeURIComponent(sender.name)}">${esc(sender.name)}</a>` : '';
+    const name = inGroup && sender ? `<a class="msg-name${nameFont(sender)}" href="#/u/${encodeURIComponent(sender.name)}" translate="no">${esc(sender.name)}</a>` : '';
     return `<div class="msg-group ${g.mine ? 'mine' : 'them'}">${face}<div class="msg-stack">${name}${bubbles}<small class="msg-meta">${meta}</small></div></div>`;
   }
 
@@ -1655,14 +1697,17 @@
     const friends = store.friendStatus(u.name) === 'friends';
     const head =
       `<div class="chat-head"><a class="m3-toolbar-btn" href="#/messages" data-effect="nudge-left" data-shape="cookie7" aria-label="All messages">${icon('arrow_back')}</a>` +
-      `<a class="chat-who" href="#/u/${encodeURIComponent(u.name)}">${avatar(u, 40, { moving: true })}<span><b class="${nameFont(u).trim()}">${esc(u.name)}</b>${prideFlag(u)}<small>${friends ? 'Friends' : 'u/' + esc(u.name)}${u.pronouns ? ' · ' + esc(u.pronouns) : ''}</small></span></a>` +
+      `<a class="chat-who" href="#/u/${encodeURIComponent(u.name)}">${avatar(u, 40, { moving: true })}<span><b class="${nameFont(u).trim()}" translate="no">${esc(u.name)}</b>${prideFlag(u)}<small>${friends ? 'Friends' : 'u/' + esc(u.name)}${u.pronouns ? ' · ' + esc(u.pronouns) : ''}</small></span></a>` +
       (friends ? callButtons(`data-user="${esc(u.name)}"`, 'u/' + u.name) : '') +
       (store.state.canBlock
         ? `<button class="m3-icon-btn chat-report" data-act="person-menu" data-user="${esc(u.name)}" aria-label="More for u/${esc(u.name)}" data-tooltip="More">${icon('more_vert')}</button></div>`
         : `<button class="m3-icon-btn chat-report" data-act="report-user" data-user="${esc(u.name)}" aria-label="Report u/${esc(u.name)}" data-tooltip="Report">${icon('flag')}</button></div>`);
+    const theme = store.chatTheme(u.name);
     return {
       title: `Chat with u/${u.name}`,
       brand: u.shape,
+      // the chat's own colour (1.0), whatever the setting for nests' colours says: the two of them picked it
+      wear: theme ? { color: theme, always: true } : undefined,
       html: chatPage(head, {
         placeholder: `Message u/${u.name}`,
         locked: store.isBlocked(u.name)
@@ -1693,12 +1738,14 @@
     const sub = () => plural(store.group(id).members.length, 'member');
     const head =
       `<div class="chat-head"><a class="m3-toolbar-btn" href="#/messages" data-effect="nudge-left" data-shape="cookie7" aria-label="All messages">${icon('arrow_back')}</a>` +
-      `<button type="button" class="chat-who" data-act="group-info" data-group="${esc(id)}" aria-label="About ${esc(g.name)}"><span class="group-icon">${groupIcon(g, 40)}</span><span><b class="group-name">${esc(g.name)}</b><small class="group-sub">${sub()}</small></span></button>` +
+      `<button type="button" class="chat-who" data-act="group-info" data-group="${esc(id)}" aria-label="About ${esc(g.name)}"><span class="group-icon">${groupIcon(g, 40)}</span><span><b class="group-name" translate="no">${esc(g.name)}</b><small class="group-sub">${sub()}</small></span></button>` +
       callButtons(`data-group="${esc(id)}"`, g.name) +
       `<button class="m3-icon-btn" data-act="group-info" data-group="${esc(id)}" aria-label="Group info" data-tooltip="Group info">${icon('info')}</button></div>`;
     return {
       title: g.name,
       brand: g.shape,
+      // a group chat wears its group's colour (1.0)
+      wear: serverAt('1.0.0') ? { color: g.color, always: true } : undefined,
       html: chatPage(head, { placeholder: `Message ${g.name}` }),
       mount(root) {
         g.reading = true;
@@ -1709,7 +1756,7 @@
           read: () => store.markGroupRead(id),
           reportKind: 'gmessage',
           render: (all) => chatHTML(all, null, true),
-          empty: () => `<div class="chat-empty">${groupIcon(g, 72)}<b>${esc(g.name)}</b><span class="muted">No messages yet. Say hi!</span></div>`,
+          empty: () => `<div class="chat-empty">${groupIcon(g, 72)}<b translate="no">${esc(g.name)}</b><span class="muted">No messages yet. Say hi!</span></div>`,
         });
         // the header keeps up with renames and new members; a group you've left sends you back to your chats
         root._onGroups = () => {
@@ -1928,7 +1975,7 @@
                     const item = r.item || {};
                     return (
                       `<div class="report" data-report="${r.id}"><div class="report-head"><span class="tag">${r.kind === 'post' ? 'Post' : 'Comment'}</span>${r.automatic ? `<span class="tag">${icon('smart_toy')}Automatic check</span>` : ''}<span class="muted">${esc(r.reason)} · ${ago(r.createdAt)}</span></div>` +
-                      `<div class="report-item">${item.title ? `<b>${esc(item.title)}</b>` : ''}${reportPictures(item)}${item.body ? `<p>${esc(plain(item.body, 300))}</p>` : ''}<small>by u/${esc(item.author || '[deleted]')}</small></div>` +
+                      `<div class="report-item">${item.title ? `<b translate="no">${esc(item.title)}</b>` : ''}${reportPictures(item)}${item.body ? `<p>${esc(plain(item.body, 300))}</p>` : ''}<small>by u/${esc(item.author || '[deleted]')}</small></div>` +
                       '<div class="toolbar">' +
                       `<button type="button" class="m3-btn tonal small" data-report-do="remove" data-kind="${r.kind}" data-target="${esc(r.target)}">${icon('delete')}Remove</button>` +
                       `<button type="button" class="m3-btn text small" data-report-do="dismiss" data-id="${r.id}">${icon('check')}Nothing wrong</button>` +
@@ -2138,13 +2185,16 @@
                   const item = r.item;
                   const what = !item
                     ? '<p class="muted">Already gone.</p>'
-                    : `<div class="report-item">${item.title ? `<b>${esc(item.title)}</b>` : ''}${reportPictures(item)}${item.body ? `<p>${esc(plain(item.body, 300))}</p>` : ''}<small>by u/${esc(item.author || '[deleted]')}${item.removed ? ' · already removed' : ''}${item.banned ? ' · banned' : ''}</small></div>`;
+                    : `<div class="report-item">${item.title ? `<b translate="no">${esc(item.title)}</b>` : ''}${reportPictures(item)}${item.body ? `<p>${esc(plain(item.body, 300))}</p>` : ''}<small>by u/${esc(item.author || '[deleted]')}${item.removed ? ' · already removed' : ''}${item.banned ? ' · banned' : ''}</small></div>`;
                   return (
                     `<article class="card report" data-report="${r.id}"><div class="report-head">${icon('flag')}<b>${esc(r.reason)}</b><span class="muted">a ${esc(r.kind)} · ${r.automatic ? 'flagged by the automatic check' : `reported by u/${esc(r.reporter)}`} · ${ago(r.createdAt)}</span></div>${what}` +
                     '<div class="toolbar">' +
                     (item && item.href ? `<a class="m3-btn text small" href="${esc(item.href)}">${icon('open_in_new')}Open</a>` : '') +
                     (r.kind === 'user'
-                      ? `<button class="m3-btn tonal small" data-resolve="remove">${icon('hide_image')}Clear profile</button><button class="m3-btn filled small" data-resolve="ban">${icon('block')}Ban</button>`
+                      ? // just the picture or the banner (from 1.0), the whole profile, or the account
+                        (serverAt('1.0.0') && item && item.photo ? `<button class="m3-btn tonal small" data-resolve="remove" data-parts="photo">${icon('hide_image')}Remove picture</button>` : '') +
+                        (serverAt('1.0.0') && item && item.banner ? `<button class="m3-btn tonal small" data-resolve="remove" data-parts="banner">${icon('hide_image')}Remove banner</button>` : '') +
+                        `<button class="m3-btn tonal small" data-resolve="remove">${icon('person_off')}Clear profile</button><button class="m3-btn filled small" data-resolve="ban">${icon('block')}Ban</button>`
                       : `<button class="m3-btn filled small" data-resolve="remove">${icon('gavel')}Remove</button>`) +
                     `<button class="m3-btn tonal small" data-resolve="dismiss">${icon('done')}Dismiss</button></div></article>`
                   );
@@ -2157,8 +2207,13 @@
               const r = reports.find((x) => String(x.id) === card.dataset.report);
               btn.disabled = true;
               try {
-                await store.resolveReport(r.id, btn.dataset.resolve, r.reason);
-                const done = { dismiss: 'Report dismissed', ban: 'Account banned', remove: r.kind === 'user' ? 'Profile cleared, and its owner told why' : 'Removed, and its author told why' };
+                const parts = btn.dataset.parts ? [btn.dataset.parts] : undefined;
+                await store.resolveReport(r.id, btn.dataset.resolve, r.reason, parts);
+                const done = {
+                  dismiss: 'Report dismissed',
+                  ban: 'Account banned',
+                  remove: r.kind !== 'user' ? 'Removed, and its author told why' : parts ? `${parts[0] === 'photo' ? 'Picture' : 'Banner'} removed, and its owner told why` : 'Profile cleared, and its owner told why',
+                };
                 M3.toast(done[btn.dataset.resolve], { symbol: 'gavel', shape: 'pixelCircle' });
                 paint();
               } catch (error) {

@@ -26,9 +26,10 @@ const { open } = require('./db');
 const mod = require('../js/moderation.js');
 const pictures = require('./pictures');
 const textmodel = require('./textmodel');
+const video = require('./video');
 
-const VERSION = '0.9.5';
-const TERMS = '0.9.5, 2026-10-28';
+const VERSION = '1.0.0';
+const TERMS = '1.0.0, 2026-10-30';
 const CONFIG = {
   port: Number(process.env.NOOK_PORT) || 8787,
   host: process.env.NOOK_HOST || '127.0.0.1',
@@ -186,6 +187,7 @@ function saveImage(img, ownerId) {
 const PICTURE_REFUSED = {
   profile: 'This picture might not be OK for everyone on Budgie (an automatic check flagged it), so it can’t be a profile picture or banner. Try a different one.',
   message: 'This picture might not be OK to send (an automatic check flagged it as possibly sexual), so it wasn’t sent.',
+  video: 'This video might not be OK for everyone on Budgie (an automatic check flagged it as possibly sexual), so it can’t be posted.',
   post: 'This picture looks like it shows nudity or sexual content, which isn’t allowed on Budgie.',
 };
 
@@ -199,8 +201,8 @@ async function checkPicture(img, where) {
     console.error('picture check failed:', error.message);
     fail(503, 'Pictures can’t be checked right now, so they can’t be posted. Try again in a minute.');
   }
-  // pictures in chats are held to the same limits as profile pictures
-  const verdict = pictures.verdict(score, where === 'message' ? 'profile' : where);
+  // pictures in chats are held to the same limits as profile pictures; a video's frames to a post's
+  const verdict = pictures.verdict(score, where === 'message' ? 'profile' : where === 'video' ? 'post' : where);
   if (verdict === 'block') fail(422, PICTURE_REFUSED[where], { rule: 'No sexual content' });
   return verdict;
 }
@@ -239,6 +241,14 @@ async function checkText(texts, kind, { strict = false } = {}) {
   return judged.verdict === 'review' ? textmodel.reason(judged) : null;
 }
 
+/** a username, read by the text model too (after the word lists): refused when it's sure the name is hurtful, and
+ * returned as a note for a moderator when it's only doubtful (so a name like "gay_and_proud" isn't turned away) */
+async function checkName(name) {
+  const judged = textmodel.judge(await textmodel.scoreName(name), 'public');
+  if (judged.verdict === 'block') fail(422, 'That username reads as hurtful or rude to an automatic check. Try another one.', { field: 'name', rule: mod.RULES.harassment });
+  return judged.verdict === 'review' ? textmodel.reason(judged).replace('this might be', 'this username might be') : null;
+}
+
 const imageUrl = (id) => (id ? '/api/images/' + id : '');
 // profile pictures and banners: a still (shown in feeds, and when motion is reduced) and, for a GIF, the moving one
 const MEDIA = {
@@ -258,6 +268,7 @@ const INTERESTS = [
   'sports', 'fitness', 'cooking', 'baking', 'plants', 'animals', 'travel', 'nature', 'fashion', 'dance', 'theatre', 'languages',
 ];
 const INTERESTS_MAX = 6;
+const FLAGS_MAX = 4;
 // the colour styles Material 3 makes a scheme in, for someone's profile page
 const PROFILE_SCHEMES = ['tonalSpot', 'vibrant', 'expressive', 'fidelity', 'content', 'rainbow', 'fruitSalad', 'neutral', 'monochrome'];
 const PRONOUNS_RE = /^[\p{L}\p{M}][\p{L}\p{M} /'’.,&-]{0,23}$/u;
@@ -269,7 +280,8 @@ function publicUser(u) {
   return {
     name: u.name, color: u.color, shape: u.shape, icon: u.icon, photo: imageUrl(u.photo), photoGif: imageUrl(u.photo_gif),
     banner: imageUrl(u.banner), bannerGif: imageUrl(u.banner_gif), bio: u.bio, font: u.name_font || undefined,
-    pronouns: u.pronouns || undefined, flag: u.pride_flag || undefined, interests: u.interests ? u.interests.split(',') : undefined,
+    // up to four flags (from 1.0); `flag` is the first, for an app from before then
+    pronouns: u.pronouns || undefined, flag: u.pride_flag ? u.pride_flag.split(',')[0] : undefined, flags: u.pride_flag ? u.pride_flag.split(',') : undefined, interests: u.interests ? u.interests.split(',') : undefined,
     scheme: u.profile_scheme || undefined, sticker: u.sticker_shape || undefined, badges: badges.length ? badges : undefined,
     createdAt: u.created_at, admin: u.role === 'admin' || undefined, banned: u.banned_at ? true : undefined, rev: u.rev,
   };
@@ -308,6 +320,11 @@ function postOut(row) {
   if (row.pinned_at) out.pinned = Number(row.pinned_at);
   if (row.link) out.link = JSON.parse(row.link);
   if (row.image) out.image = imageUrl(row.image);
+  if (row.video) {
+    const v = db.get('SELECT * FROM videos WHERE id = ?', row.video);
+    if (v) out.video = videoOut(v);
+  }
+  if (row.gif) out.gif = JSON.parse(row.gif);
   if (row.poll) out.poll = { options: JSON.parse(row.poll).map((option, i) => [option, a.polls[i] || 0]) };
   return out;
 }
@@ -426,8 +443,8 @@ function notify(userId, note) {
 // the last change to the Terms or Privacy Policy that matters to people already here: they're told once
 // (the robot check on sign-up since 0.5.1 only concerns new accounts, so it isn't one)
 const NOTICE = {
-  version: '0.9.5, 2026-10-28',
-  text: 'Budgie 0.9.5 is the last early-access version. Nest owners can now give people roles (moderators who can pin and remove posts and ban people from the nest), and write their nest’s rules. You can send pictures and GIFs in chats, find GIFs with KLIPY, and share your screen on calls. The Terms and Privacy Policy say how: pictures in chats are checked like profile pictures, and GIF searches go to KLIPY. Read the details in Settings → Privacy and legal.',
+  version: '1.0.0, 2026-10-30',
+  text: 'Budgie 1.0 is here, and open to everyone. New: short videos and GIFs in posts (checked automatically, like pictures), up to four pride flags, choosing the part of a picture to keep, a colour for each chat, blocking, and Budgie in Romanian, Spanish, French, German and Italian. Calls can go through Cloudflare’s relay, so the others in a call don’t see your IP address, and pause for the rest of the month if its free allowance runs out. The Terms and Privacy Policy say how: read them in Settings → Privacy and legal.',
 };
 if (db.meta('terms-told') !== NOTICE.version) {
   for (const u of db.all('SELECT id FROM users')) notify(u.id, { kind: 'system', text: NOTICE.text, symbol: 'gavel', shape: 'pixelCircle' });
@@ -532,10 +549,38 @@ function authenticate(req) {
 // ---- the routes -------------------------------------------------------------------------------------
 
 const routes = [];
-function route(method, pattern, handler, { auth = true, admin = false, body = 64 * 1024, stream = false } = {}) {
+function route(method, pattern, handler, { auth = true, admin = false, body = 64 * 1024, stream = false, upload = 0 } = {}) {
   const keys = [];
   const re = new RegExp('^' + pattern.replace(/:(\w+)/g, (_, key) => (keys.push(key), '([^/]+)')) + '$');
-  routes.push({ method, re, keys, handler, auth, admin, body, stream });
+  routes.push({ method, re, keys, handler, auth, admin, body, stream, upload });
+}
+
+/** a file sent as the whole request (a video), saved to a temporary file once its sender is known: its path */
+function saveUpload(req, max) {
+  const dir = path.join(CONFIG.data, 'tmp');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, crypto.randomBytes(12).toString('hex'));
+  return new Promise((resolve, reject) => {
+    let size = 0;
+    const out = fs.createWriteStream(file);
+    const stop = (error) => {
+      req.unpipe(out);
+      out.destroy();
+      fs.rm(file, { force: true }, () => {});
+      reject(error);
+    };
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > max) {
+        stop(new HttpError(413, `That file is too big (the limit is ${Math.round(max / 1024 / 1024)} MB).`));
+        req.destroy();
+      }
+    });
+    req.on('error', stop);
+    out.on('error', stop);
+    out.on('finish', () => (size ? resolve(file) : stop(new HttpError(400, 'Nothing arrived. Try again.'))));
+    req.pipe(out);
+  });
 }
 
 // anyone can join, unless the owner turned invite codes back on with `nook signups invite`
@@ -606,6 +651,7 @@ route('POST', '/api/signup', async ({ body, ip }) => {
   if (!NAME_RE.test(name)) fail(400, 'Usernames are 3–20 letters, numbers or underscores.', { field: 'name' });
   vet([name.replace(/_/g, ' ')], { kind: 'profile' }, { strongNames: true });
   if (db.get('SELECT 1 AS x FROM users WHERE name = ?', name)) fail(409, `u/${name} is taken. Try another name.`, { field: 'name' });
+  const nameDoubt = await checkName(name);
   if (password.length < 8) fail(400, 'Use at least 8 characters for your password.', { field: 'password' });
   if (password.length > 200) fail(400, 'That password is too long.', { field: 'password' });
   if (password.toLowerCase() === name.toLowerCase()) fail(400, 'Your password can’t be your username.', { field: 'password' });
@@ -631,6 +677,7 @@ route('POST', '/api/signup', async ({ body, ip }) => {
     return db.get('SELECT * FROM users WHERE id = ?', id);
   });
   if (badgesOf(user).includes('early')) notify(user.id, Object.assign({ kind: 'badge', href: '#/u/' + user.name }, EARLY_NOTE));
+  if (nameDoubt) autoReport('user', user.name, nameDoubt);
   return { token: newSession(user.id), recovery, me: meOut(user) };
 }, { auth: false });
 
@@ -708,7 +755,9 @@ route('GET', '/api/account/export', ({ user }) => {
     nestRoles: db.all('SELECT nook, role, title, perms, created_at AS since FROM nest_team WHERE user_id = ?', id),
     nestBans: db.all('SELECT nook, reason, created_at AS since, until FROM nest_bans WHERE user_id = ?', id),
     blocked: blockedNames(id),
+    chatThemes: chatThemesOf(id),
     images: db.all('SELECT id, mime, created_at AS createdAt FROM images WHERE owner_id = ?', id).map((r) => ({ url: imageUrl(r.id), type: r.mime, createdAt: r.createdAt })),
+    videos: db.all('SELECT * FROM videos WHERE owner_id = ?', id).map((v) => Object.assign(videoOut(v), { post: v.post_id || undefined, createdAt: v.created_at })),
   };
 });
 
@@ -717,8 +766,9 @@ function eraseUser(id) {
   const t = now();
   db.tx(() => {
     for (const p of db.all('SELECT id FROM posts WHERE author_id = ? AND removed_at IS NULL', id)) {
-      db.run("UPDATE posts SET title = '', body = '', link = NULL, image = NULL, poll = NULL, removed_at = ?, removed_reason = 'deleted', author_id = NULL, rev = ? WHERE id = ?", t, db.bump(), p.id);
+      db.run("UPDATE posts SET title = '', body = '', link = NULL, image = NULL, poll = NULL, video = '', removed_at = ?, removed_reason = 'deleted', author_id = NULL, rev = ? WHERE id = ?", t, db.bump(), p.id);
     }
+    for (const v of db.all('SELECT id FROM videos WHERE owner_id = ?', id)) dropVideo(v.id);
     for (const c of db.all('SELECT id FROM comments WHERE author_id = ? AND removed_at IS NULL', id)) {
       db.run("UPDATE comments SET body = '', removed_at = ?, removed_reason = 'deleted', author_id = NULL, rev = ? WHERE id = ?", t, db.bump(), c.id);
     }
@@ -793,6 +843,12 @@ route('GET', '/api/bootstrap', ({ user }) => {
     blocked: blockedNames(id),
     // the KLIPY key for GIF search, once the owner has set one (KLIPY asks for searches to come from the app itself)
     gifs: db.meta('klipy-key') || undefined,
+    // whether videos can be posted (the server needs ffmpeg for them)
+    videos: video.available() || undefined,
+    // calls paused until then (the relay's free allowance for the month is used up)
+    callsPaused: callsPaused() ? nextMonth() : undefined,
+    // the colours picked for chats with friends (1.0), by their name
+    chatThemes: chatThemesOf(id),
   };
 });
 
@@ -834,6 +890,7 @@ route('GET', '/api/updates', ({ user, query }) => {
     // calls ringing for you, for a device that couldn't keep its event stream open
     ringing: [...calls.values()].filter((c) => c.ringing.has(id)).map(callOut),
     blocked: blockedNames(id),
+    chatThemes: chatThemesOf(id),
   };
 });
 
@@ -845,7 +902,7 @@ route('POST', '/api/posts', async ({ user, body }) => {
   const nook = nookData(n);
   if (!nook) fail(404, 'That nest doesn’t exist.');
   notBanned(user, n);
-  const type = ['text', 'image', 'link', 'poll'].includes(body.type) ? body.type : 'text';
+  const type = ['text', 'image', 'link', 'poll', 'video', 'gif'].includes(body.type) ? body.type : 'text';
   const title = text(body.title, 300);
   const postBody = text(body.body, 10000);
   if (title.length < 3) fail(400, 'Give your post a title (at least 3 characters).', { field: 'title' });
@@ -866,26 +923,136 @@ route('POST', '/api/posts', async ({ user, body }) => {
     poll = (Array.isArray(body.poll) ? body.poll : []).map((o) => text(o, 120)).filter(Boolean).slice(0, 6);
     if (poll.length < 2) fail(400, 'A poll needs at least two options.', { field: 'poll' });
   }
+  // a GIF found with KLIPY's search (1.0): kept as KLIPY's link, as in chats, and loaded from KLIPY by whoever sees it
+  let gif = null;
+  if (type === 'gif') {
+    if (!db.meta('klipy-key')) fail(400, 'GIF search is off.', { field: 'image' });
+    const g = body.gif || {};
+    const url = text(g.url, 600);
+    const still = g.still ? text(g.still, 600) : '';
+    if (!KLIPY_MEDIA_RE.test(url) || (still && !KLIPY_MEDIA_RE.test(still))) fail(400, 'That GIF can’t be posted.', { field: 'image' });
+    gif = Object.assign({ url, still: still || undefined, title: text(g.title, 120) || undefined }, dims(g.width, g.height));
+  }
   vet([title, postBody, ...(poll || []), link && link.url], { kind: 'post', history: history(user.id) });
-  const picture = type === 'image' ? readImage(body.image, 3 * 1024 * 1024) : null;
+  // a picture, or (from 1.0) a GIF, checked frame by frame like a profile GIF
+  const isGif = type === 'image' && /^data:image\/gif/.test(String(body.image || ''));
+  const picture = type === 'image' ? readImage(body.image, isGif ? POST_GIF_MAX : 3 * 1024 * 1024, { gif: true, maxSide: 2048 }) : null;
+  // a video was uploaded (and checked) already: it's theirs, and in no other post
+  let clip = null;
+  if (type === 'video') {
+    clip = db.get('SELECT * FROM videos WHERE id = ? AND owner_id = ?', text(body.video, 40), user.id);
+    if (!clip || clip.post_id) fail(400, 'That video is gone. Add it again.', { field: 'video' });
+  }
   const doubt = await checkText([title, postBody, ...(poll || [])], 'post');
-  const review = picture ? await checkPicture(picture, 'post') : 'ok';
+  const review = picture ? await checkPicture(picture, 'post') : clip ? clip.review || 'ok' : 'ok';
 
   const id = randomId('p', 8);
   const t = now();
   db.tx(() => {
     const image = picture ? saveImage(picture, user.id) : null;
     db.run(
-      'INSERT INTO posts (id, nook, author_id, type, title, body, flair, link, image, poll, spoiler, created_at, rev) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      id, n, user.id, type, title, postBody, flair, link ? JSON.stringify(link) : null, image, poll ? JSON.stringify(poll) : null, body.spoiler ? 1 : 0, t, db.bump()
+      'INSERT INTO posts (id, nook, author_id, type, title, body, flair, link, image, poll, video, gif, spoiler, created_at, rev) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      id, n, user.id, type, title, postBody, flair, link ? JSON.stringify(link) : null, image, poll ? JSON.stringify(poll) : null, clip ? clip.id : '', gif ? JSON.stringify(gif) : '', body.spoiler ? 1 : 0, t, db.bump()
     );
+    if (clip) db.run('UPDATE videos SET post_id = ? WHERE id = ?', id, clip.id);
     // you upvote your own, as tradition demands
     db.run('INSERT INTO votes (user_id, target, value) VALUES (?, ?, 1)', user.id, id);
   });
-  if (review === 'review') autoReport('post', id, 'this picture might be sexual. Please take a look.');
+  if (review === 'review') autoReport('post', id, `this ${clip ? 'video' : isGif ? 'GIF' : 'picture'} might be sexual. Please take a look.`);
   else if (doubt) autoReport('post', id, doubt);
   return { post: postOut(db.get(`${POST_SELECT} WHERE p.id = ?`, id)) };
-}, { body: 4.5 * 1024 * 1024 });
+}, { body: 9 * 1024 * 1024 });
+
+// ---- videos (1.0): uploaded on their own first, made into a plain MP4 and checked, then put in a post ----------------
+
+const POST_GIF_MAX = 6 * 1024 * 1024;
+const VIDEO_UPLOAD_MAX = 100 * 1024 * 1024;
+const VIDEOS = path.join(CONFIG.data, 'videos');
+fs.mkdirSync(VIDEOS, { recursive: true });
+const videoFile = (id) => path.join(VIDEOS, id + '.mp4');
+const videoOut = (v) => ({ url: `/api/videos/${v.id}.mp4`, poster: imageUrl(v.poster), width: v.width, height: v.height, duration: Math.round(v.duration * 10) / 10 });
+
+/** a video, its file and its still go */
+function dropVideo(id) {
+  const v = db.get('SELECT * FROM videos WHERE id = ?', id);
+  if (!v) return;
+  if (v.poster) db.run('DELETE FROM images WHERE id = ?', v.poster);
+  db.run('DELETE FROM videos WHERE id = ?', id);
+  fs.rm(videoFile(id), { force: true }, () => {});
+}
+
+route('POST', '/api/videos', async ({ user, file }) => {
+  if (!video.available()) fail(503, 'Budgie can’t take videos right now.');
+  limit('video:' + user.id, 12, DAY, 'That’s a lot of videos for one day. Try again tomorrow.');
+  const id = randomId('v', 16);
+  const out = videoFile(id);
+  try {
+    let source;
+    try {
+      source = await video.probe(file);
+    } catch (error) {
+      fail(400, error.message);
+    }
+    if (source.duration > video.MAX_SECONDS + 1) fail(400, `Videos can be up to ${video.MAX_SECONDS} seconds long. Trim it and try again.`);
+    if (source.duration < 0.3) fail(400, 'That video is too short.');
+    let made;
+    try {
+      made = await video.prepare(file, out);
+    } catch (error) {
+      console.error('video failed:', error.message);
+      fail(400, 'That video couldn’t be read. Try another one, or an MP4.');
+    }
+    // checked like a picture in a post: frames from across it
+    let review = 'ok';
+    for (const frame of await video.frames(out, made.duration)) {
+      const verdict = await checkPicture({ bytes: frame, mime: 'image/jpeg' }, 'video');
+      if (verdict === 'review') review = 'review';
+    }
+    const still = await video.poster(out, made.duration);
+    const poster = saveImage({ bytes: still, mime: 'image/jpeg' }, user.id);
+    db.run(
+      'INSERT INTO videos (id, owner_id, poster, width, height, duration, size, review, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      id, user.id, poster, made.width, made.height, made.duration, fs.statSync(out).size, review === 'review' ? 'review' : '', now()
+    );
+    return { video: Object.assign({ id }, videoOut(db.get('SELECT * FROM videos WHERE id = ?', id))) };
+  } catch (error) {
+    fs.rm(out, { force: true }, () => {});
+    throw error;
+  }
+}, { upload: VIDEO_UPLOAD_MAX });
+
+// a video that was uploaded but never posted goes after a few hours
+setInterval(() => {
+  for (const v of db.all("SELECT id FROM videos WHERE post_id = '' AND created_at < ?", now() - 6 * HOUR)) dropVideo(v.id);
+}, HOUR).unref();
+
+/** sends a video, or the part of it a player asks for (Safari always asks for parts) */
+function serveVideo(req, res, id) {
+  const file = videoFile(id);
+  let size;
+  try {
+    size = fs.statSync(file).size;
+  } catch (_) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    return res.end('Not found');
+  }
+  const headers = { 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' };
+  const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+  if (range && (range[1] || range[2])) {
+    let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+    let end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+    if (start < 0) start = 0;
+    if (start >= size || start > end) {
+      res.writeHead(416, { 'Content-Range': `bytes */${size}` });
+      return res.end();
+    }
+    res.writeHead(206, Object.assign(headers, { 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 }));
+    return fs.createReadStream(file, { start, end }).pipe(res);
+  }
+  res.writeHead(200, Object.assign(headers, { 'Content-Length': size }));
+  if (req.method === 'HEAD') return res.end();
+  fs.createReadStream(file).pipe(res);
+}
 
 function ownPost(user, id) {
   const p = db.get('SELECT * FROM posts WHERE id = ?', id);
@@ -912,7 +1079,8 @@ route('PATCH', '/api/posts/:id', async ({ user, params, body }) => {
 function removePost(p, reason) {
   db.tx(() => {
     if (p.image) db.run('DELETE FROM images WHERE id = ?', p.image);
-    db.run("UPDATE posts SET title = '', body = '', link = NULL, image = NULL, poll = NULL, pinned_at = '', removed_at = ?, removed_reason = ?, rev = ? WHERE id = ?", now(), reason, db.bump(), p.id);
+    if (p.video) dropVideo(p.video);
+    db.run("UPDATE posts SET title = '', body = '', link = NULL, image = NULL, poll = NULL, video = '', gif = '', pinned_at = '', removed_at = ?, removed_reason = ?, rev = ? WHERE id = ?", now(), reason, db.bump(), p.id);
   });
 }
 
@@ -1301,6 +1469,7 @@ route('POST', '/api/nooks/:id/reports/:rid/dismiss', ({ user, params }) => {
 route('PATCH', '/api/me', async ({ user, body }) => {
   const next = { name: user.name, color: user.color, shape: user.shape, icon: user.icon, bio: user.bio, photo: user.photo, photo_gif: user.photo_gif, banner: user.banner, banner_gif: user.banner_gif, name_font: user.name_font,
     pronouns: user.pronouns, pride_flag: user.pride_flag, interests: user.interests, profile_scheme: user.profile_scheme, sticker_shape: user.sticker_shape };
+  let nameDoubt = null;
   if (body.name != null && body.name !== user.name) {
     limit('rename:' + user.id, 5, DAY, 'You can change your username up to 5 times a day.');
     const name = text(body.name, 40);
@@ -1308,6 +1477,7 @@ route('PATCH', '/api/me', async ({ user, body }) => {
     vet([name.replace(/_/g, ' ')], { kind: 'profile' }, { strongNames: true });
     const taken = db.get('SELECT id FROM users WHERE name = ?', name);
     if (taken && taken.id !== user.id) fail(409, `u/${name} is taken. Try another name.`, { field: 'name' });
+    nameDoubt = await checkName(name);
     next.name = name;
   }
   if (body.bio != null) {
@@ -1326,7 +1496,12 @@ route('PATCH', '/api/me', async ({ user, body }) => {
     if (pronouns) vet([pronouns], { kind: 'profile' }, { strongNames: true });
     next.pronouns = pronouns;
   }
-  if (body.flag != null) {
+  if (Array.isArray(body.flags)) {
+    const flags = [...new Set(body.flags.map(String))];
+    if (flags.some((f) => !PRIDE_FLAGS.includes(f))) fail(400, 'That isn’t one of Budgie’s pride flags.', { field: 'flag' });
+    if (flags.length > FLAGS_MAX) fail(400, `You can wear up to ${FLAGS_MAX} flags.`, { field: 'flag' });
+    next.pride_flag = flags.join(',');
+  } else if (body.flag != null) {
     if (body.flag !== '' && !PRIDE_FLAGS.includes(body.flag)) fail(400, 'That isn’t one of Budgie’s pride flags.', { field: 'flag' });
     next.pride_flag = body.flag;
   }
@@ -1378,6 +1553,7 @@ route('PATCH', '/api/me', async ({ user, body }) => {
       for (const c of db.all('SELECT id FROM comments WHERE author_id = ?', user.id)) db.run('UPDATE comments SET rev = ? WHERE id = ?', db.bump(), c.id);
     }
   });
+  if (nameDoubt) autoReport('user', next.name, nameDoubt);
   if (review) autoReport('user', next.name, 'this profile picture or banner might not be OK for everyone. Please take a look.');
   else if (bioDoubt) autoReport('user', next.name, bioDoubt.replace('this might be', 'this bio might be'));
   return { me: meOut(db.get('SELECT * FROM users WHERE id = ?', user.id)) };
@@ -1516,6 +1692,31 @@ route('POST', '/api/messages', async ({ user, body }) => {
   else if (doubt) autoReport('message', Number(lastInsertRowid), doubt);
   return { message: messageOut(db.get(`${MESSAGE_SELECT} WHERE m.id = ?`, Number(lastInsertRowid)), user.id) };
 }, { body: 6 * 1024 * 1024 });
+
+// a chat's colour (1.0): either friend picks it, both see the chat wear it, and the chat says who changed it
+const chatThemesOf = (userId) =>
+  Object.fromEntries(
+    db.all('SELECT t.color, ua.id AS ida, ua.name AS na, ub.name AS nb FROM chat_themes t JOIN users ua ON ua.id = t.a JOIN users ub ON ub.id = t.b WHERE t.a = ? OR t.b = ?', userId, userId)
+      .map((r) => [(r.ida === userId ? r.nb : r.na).toLowerCase(), r.color])
+  );
+route('PUT', '/api/chats/:name/theme', ({ user, params, body }) => {
+  limit('theme:' + user.id, 30, HOUR, 'That’s a lot of colour changes. Try again in a little while.');
+  const other = db.get('SELECT * FROM users WHERE name = ?', decodeURIComponent(params.name));
+  if (!other || other.banned_at || other.id === user.id) fail(404, 'There’s nobody by that name.');
+  const f = friendship(user.id, other.id);
+  if (!f || f.status !== 'friends') fail(403, 'You can only change a chat with a friend.');
+  const color = body.color ? (HEX_RE.test(body.color) ? body.color.toLowerCase() : fail(400, 'Pick a colour.')) : '';
+  const [a, b] = user.id < other.id ? [user.id, other.id] : [other.id, user.id];
+  const was = db.get('SELECT color FROM chat_themes WHERE a = ? AND b = ?', a, b);
+  if ((was ? was.color : '') === color) return { color };
+  db.tx(() => {
+    if (color) db.run('INSERT INTO chat_themes (a, b, color, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(a, b) DO UPDATE SET color = excluded.color, updated_at = excluded.updated_at', a, b, color, now());
+    else db.run('DELETE FROM chat_themes WHERE a = ? AND b = ?', a, b);
+    // a line in the chat, already read (it isn't news to wait for)
+    db.run("INSERT INTO messages (from_id, to_id, kind, body, created_at, read_at) VALUES (?, ?, 'theme', ?, ?, ?)", user.id, other.id, JSON.stringify({ color }), now(), now());
+  });
+  return { color };
+});
 
 route('POST', '/api/messages/read', ({ user, body }) => {
   const other = db.get('SELECT id FROM users WHERE name = ?', text(body.with, 40));
@@ -1791,6 +1992,54 @@ async function iceConfig() {
   }
 }
 
+// ---- the relay's monthly allowance (1.0) --------------------------------------------------------------------
+// Cloudflare's TURN relay is free up to an allowance a month (1,000 GB, counted as what it sends to devices). Each
+// device in a relayed call says how much it got through the relay; the month's total, with a tenth on top for the
+// relay's own overhead, is kept here. When it reaches the limit (950 GB unless `nook turn-limit` says otherwise),
+// every call ends and none can start until the month turns. With `nook turn-usage`, Cloudflare's own count is
+// fetched too every hour, and the higher of the two counts.
+const monthKey = (t = now()) => new Date(t).toISOString().slice(0, 7);
+const nextMonth = (t = now()) => {
+  const d = new Date(t);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1);
+};
+const relayLimit = () => (Number(db.meta('turn-limit-gb')) || 950) * 1e9;
+const relayUsed = () => Math.max(Number(db.meta('turn-used-' + monthKey())) || 0, Number(db.meta('turn-cf-' + monthKey())) || 0);
+const callsPaused = () => !!db.meta('turn-key') && relayUsed() >= relayLimit();
+const pausedMessage = () =>
+  `Calls are paused until ${new Date(nextMonth()).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })}: Budgie’s free calling allowance for this month is used up. Messages still work.`;
+function addRelayUse(bytes) {
+  const key = 'turn-used-' + monthKey();
+  db.meta(key, String((Number(db.meta(key)) || 0) + Math.round(bytes * 1.1)));
+  if (callsPaused()) pauseCalls();
+}
+/** the allowance is used up: every call ends, and everyone in one is told until when */
+function pauseCalls() {
+  for (const c of [...calls.values()]) endCall(c, 'limit');
+}
+/** Cloudflare's own count of what the relay sent this month, when the owner gave an analytics token */
+async function checkRelayUsage() {
+  const account = db.meta('cf-account');
+  const token = db.meta('cf-analytics-token');
+  if (!account || !token || !db.meta('turn-key')) return null;
+  const start = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1) - 60000).toISOString();
+  const query = 'query($a: string!, $s: Time!, $e: Time!) { viewer { accounts(filter: { accountTag: $a }) { callsTurnUsageAdaptiveGroups(filter: { datetimeMinute_gt: $s, datetimeMinute_lt: $e }, limit: 1) { sum { egressBytes } } } } }';
+  const res = await fetch('https://api.cloudflare.com/client/v4/graphql', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, variables: { a: account, s: start, e: new Date().toISOString() } }),
+    signal: AbortSignal.timeout(20000),
+  });
+  const json = await res.json();
+  if (!res.ok || json.errors) throw new Error((json.errors && json.errors[0] && json.errors[0].message) || 'Cloudflare answered ' + res.status);
+  const groups = json.data.viewer.accounts[0] ? json.data.viewer.accounts[0].callsTurnUsageAdaptiveGroups : [];
+  const bytes = groups.length ? Number(groups[0].sum.egressBytes) || 0 : 0;
+  db.meta('turn-cf-' + monthKey(), String(bytes));
+  if (callsPaused()) pauseCalls();
+  return bytes;
+}
+setInterval(() => checkRelayUsage().catch((error) => console.error('Couldn’t check the relay’s use with Cloudflare:', error.message)), HOUR).unref();
+
 function callOut(c) {
   const g = c.group && db.get('SELECT name, color, shape FROM chat_groups WHERE id = ?', c.group);
   return {
@@ -1876,7 +2125,7 @@ function endCall(c, reason) {
   if (!calls.delete(c.id)) return;
   clearTimeout(c.timer);
   for (const timer of (c.away || new Map()).values()) clearTimeout(timer);
-  for (const id of new Set([...c.ever, ...c.ringing, c.by, ...(c.peer ? [c.peer] : [])])) signal(id, 'call-ended', { call: c.id, reason });
+  for (const id of new Set([...c.ever, ...c.ringing, c.by, ...(c.peer ? [c.peer] : [])])) signal(id, 'call-ended', { call: c.id, reason, until: reason === 'limit' ? nextMonth() : undefined });
   // its line in the chat: how long it went on, or that nobody picked up
   const log = JSON.stringify({ media: c.media, secs: c.answered ? Math.round((now() - c.answered) / 1000) : 0, missed: !c.answered || undefined });
   try {
@@ -1905,6 +2154,7 @@ function disconnect(userId) {
 
 route('POST', '/api/calls', async ({ user, body }) => {
   limit('call:' + user.id, 30, HOUR, 'That’s a lot of calls. Wait a little and try again.');
+  if (callsPaused()) fail(503, pausedMessage(), { callsPaused: nextMonth() });
   const media = body.media === 'video' ? 'video' : 'voice';
   if (callOf(user.id)) fail(409, 'You’re already in a call. Hang up first.');
   if (body.group) {
@@ -1929,6 +2179,7 @@ route('POST', '/api/calls', async ({ user, body }) => {
 route('POST', '/api/calls/:id/join', ({ user, params }) => {
   const c = calls.get(params.id);
   if (!c) fail(404, 'That call has ended.');
+  if (callsPaused()) fail(503, pausedMessage(), { callsPaused: nextMonth() });
   return joinCall(c, user);
 });
 
@@ -1982,6 +2233,17 @@ route('POST', '/api/calls/:id/ring', ({ user, params, body }) => {
   return { rang: ring.map((m) => m.name), call: callOut(c) };
 });
 
+/** how much came to this device through the relay since it last said (only counted while the relay is on) */
+route('POST', '/api/calls/:id/usage', ({ user, params, body }) => {
+  limit('usage:' + user.id, 30, MINUTE);
+  const c = calls.get(params.id);
+  if (!c || !c.joined.has(user.id) || !db.meta('turn-key')) return { ok: true };
+  // at most what a fast video call could bring in a quarter of a minute (more is a mistake, or someone fooling)
+  const bytes = Math.max(0, Math.min(Number(body.bytes) || 0, 64 * 1024 * 1024));
+  addRelayUse(bytes);
+  return { ok: true };
+});
+
 route('POST', '/api/calls/:id/leave', ({ user, params }) => {
   const c = calls.get(params.id);
   if (c) leaveCall(c, user.id);
@@ -2012,7 +2274,11 @@ setInterval(() => {
 function reportTarget(r) {
   if (r.kind === 'post') {
     const p = db.get(`${POST_SELECT} WHERE p.id = ?`, r.target);
-    return p ? { title: p.title, body: p.body.slice(0, 500), picture: imageUrl(p.image), author: p.author_name, removed: !!p.removed_at, href: `#/n/${p.nook}/p/${p.id}` } : null;
+    if (!p) return null;
+    // what a moderator needs to see: the picture, the GIF, or a video's still
+    const clip = p.video ? db.get('SELECT poster FROM videos WHERE id = ?', p.video) : null;
+    const picture = p.image ? imageUrl(p.image) : p.gif ? JSON.parse(p.gif).url : clip ? imageUrl(clip.poster) : '';
+    return { title: p.title, body: p.body.slice(0, 500), picture, author: p.author_name, removed: !!p.removed_at, href: `#/n/${p.nook}/p/${p.id}` };
   }
   if (r.kind === 'comment') {
     const c = db.get(`${COMMENT_SELECT} WHERE c.id = ?`, r.target);
@@ -2049,7 +2315,9 @@ route('GET', '/api/admin/reports', () => {
 }, { admin: true });
 
 /** an admin takes something down; its author is told what and why */
-function takeDown(kind, id, reason, by = 'A moderator') {
+// what of a profile a moderator can take down, each on its own (from 1.0), and how the owner is told
+const PROFILE_PARTS = { photo: 'profile picture', banner: 'banner', bio: 'bio', pronouns: 'pronouns' };
+function takeDown(kind, id, reason, by = 'A moderator', parts = null) {
   if (kind === 'post') {
     const p = db.get('SELECT * FROM posts WHERE id = ?', id);
     if (!p || p.removed_at) return false;
@@ -2089,12 +2357,23 @@ function takeDown(kind, id, reason, by = 'A moderator') {
     return true;
   }
   if (kind === 'user') {
-    // a profile is "taken down" by clearing its picture, banner, bio and pronouns (what someone writes or uploads)
+    // a profile is "taken down" by clearing its picture, banner, bio and pronouns (what someone writes or uploads),
+    // or just the parts asked for: a picture that breaks the rules goes, and the rest of the profile stays
     const u = db.get('SELECT * FROM users WHERE name = ?', id);
-    if (!u || !(u.photo || u.banner || u.bio || u.pronouns)) return false;
-    for (const img of [u.photo, u.photo_gif, u.banner, u.banner_gif]) if (img) db.run('DELETE FROM images WHERE id = ?', img);
-    db.run("UPDATE users SET photo = '', photo_gif = '', banner = '', banner_gif = '', bio = '', pronouns = '', rev = ? WHERE id = ?", db.bump(), u.id);
-    notify(u.id, { kind: 'moderation', text: `A moderator cleared your profile picture, banner, bio and pronouns. Reason: ${reason}. If you think this was a mistake, contact Budgie.`, href: '#/u/' + u.name, symbol: 'gavel', shape: 'pixelCircle' });
+    const asked = Array.isArray(parts) && parts.length ? Object.keys(PROFILE_PARTS).filter((p) => parts.includes(p)) : Object.keys(PROFILE_PARTS);
+    const clearing = u ? asked.filter((p) => u[p]) : [];
+    if (!clearing.length) return false;
+    const sets = [];
+    for (const p of clearing) {
+      if (p === 'photo' || p === 'banner') {
+        for (const img of [u[p], u[p + '_gif']]) if (img) db.run('DELETE FROM images WHERE id = ?', img);
+        sets.push(`${p} = ''`, `${p}_gif = ''`);
+      } else sets.push(`${p} = ''`);
+    }
+    db.run(`UPDATE users SET ${sets.join(', ')}, rev = ? WHERE id = ?`, db.bump(), u.id);
+    const named = clearing.map((p) => PROFILE_PARTS[p]);
+    const list = named.length > 1 ? named.slice(0, -1).join(', ') + ' and ' + named[named.length - 1] : named[0];
+    notify(u.id, { kind: 'moderation', text: `A moderator removed your ${list}. Reason: ${reason}. If you think this was a mistake, contact Budgie.`, href: '#/u/' + u.name, symbol: 'gavel', shape: 'pixelCircle' });
     return true;
   }
   return false;
@@ -2119,8 +2398,8 @@ route('POST', '/api/admin/resolve', ({ body }) => {
   const reason = text(body.reason, 200) || r.reason;
   let resolution = 'dismissed';
   if (body.action === 'remove') {
-    takeDown(r.kind, r.target, reason);
-    resolution = 'removed: ' + reason;
+    takeDown(r.kind, r.target, reason, 'A moderator', body.parts);
+    resolution = 'removed' + (Array.isArray(body.parts) && body.parts.length ? ` (${body.parts.join(', ')})` : '') + ': ' + reason;
   } else if (body.action === 'ban' && r.kind === 'user') {
     ban(r.target, reason, true);
     resolution = 'banned: ' + reason;
@@ -2132,7 +2411,7 @@ route('POST', '/api/admin/resolve', ({ body }) => {
 
 route('POST', '/api/admin/remove', ({ body }) => {
   const reason = text(body.reason, 200) || 'Breaks Budgie’s rules';
-  if (!takeDown(body.kind, text(body.id, 60), reason)) fail(404, 'That’s already gone.');
+  if (!takeDown(body.kind, text(body.id, 60), reason, 'A moderator', body.parts)) fail(404, 'That’s already gone.');
   return { ok: true };
 }, { admin: true });
 
@@ -2225,6 +2504,8 @@ async function handle(req, res) {
   }
   const image = /^\/api\/images\/([^/]+)$/.exec(url.pathname);
   if (image && req.method === 'GET') return serveImage(res, image[1]);
+  const clip = /^\/api\/videos\/([A-Za-z0-9_-]{8,40})\.mp4$/.exec(url.pathname);
+  if (clip && (req.method === 'GET' || req.method === 'HEAD')) return serveVideo(req, res, clip[1]);
 
   for (const r of routes) {
     if (r.method !== req.method) continue;
@@ -2236,7 +2517,7 @@ async function handle(req, res) {
       params,
       query: Object.fromEntries(url.searchParams),
       ip: req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : 'unknown',
-      body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req, r.body) : {},
+      body: ['POST', 'PUT', 'PATCH'].includes(req.method) && !r.upload ? await readBody(req, r.body) : {},
     };
     if (r.auth) {
       const who = authenticate(req);
@@ -2250,6 +2531,15 @@ async function handle(req, res) {
     }
     // a stream writes its own answer, and keeps writing
     if (r.stream) return r.handler(Object.assign(ctx, { req, res }));
+    // an upload is only taken from someone signed in, and its temporary file goes when the handler's done
+    if (r.upload) {
+      ctx.file = await saveUpload(req, r.upload);
+      try {
+        return send(res, 200, await r.handler(ctx));
+      } finally {
+        fs.rm(ctx.file, { force: true }, () => {});
+      }
+    }
     return send(res, 200, await r.handler(ctx));
   }
   fail(404, 'There’s nothing here.');
@@ -2262,7 +2552,8 @@ const server = http.createServer((req, res) => {
     send(res, 500, { error: 'Something went wrong on Budgie’s server. Try again in a moment.' });
   });
 });
-server.requestTimeout = 30000;
+// long enough for a video to arrive on a slow phone connection (the headers still have to come within 15 seconds)
+server.requestTimeout = 5 * 60000;
 server.headersTimeout = 15000;
 
 if (require.main === module) {
@@ -2276,4 +2567,4 @@ if (require.main === module) {
   process.on('SIGINT', stop);
 }
 
-module.exports = { server, db, CONFIG, VERSION, inviteHash, hashPassword, recoveryCode, recoveryHash, takeDown, ban, eraseUser, pictures, textmodel, autoReport, setBadge, badgesOf };
+module.exports = { checkRelayUsage, relayUsed, relayLimit, monthKey, server, db, CONFIG, VERSION, inviteHash, hashPassword, recoveryCode, recoveryHash, takeDown, ban, eraseUser, pictures, textmodel, autoReport, setBadge, badgesOf };

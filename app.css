@@ -460,6 +460,8 @@ body.bars-hidden .bottom-nav {
   position: relative;
   display: flex;
   flex: 1;
+  min-width: 0;
+  text-align: center;
   flex-direction: column;
   align-items: center;
   gap: 4px;
@@ -491,7 +493,8 @@ body.bars-hidden .bottom-nav {
 .bottom-nav .create .nav-ind {
   width: 52px;
   height: 36px;
-  margin-top: -2px;
+  /* taller than the others by 4px, half above and half below, so its word lines up with theirs */
+  margin: -2px 0;
   border-radius: 14px;
   background: var(--m3-primary-container);
   color: var(--m3-on-primary-container);
@@ -862,6 +865,69 @@ mark {
   max-height: 560px;
   object-fit: contain;
 }
+/* a video post (1.0): as tall as it needs, black around it, at most a screen's worth */
+.post-art.video {
+  aspect-ratio: var(--ratio, 16 / 9);
+  max-height: 560px;
+  background: #000;
+}
+.post-art.video video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-height: 560px;
+  object-fit: contain;
+  background: #000;
+}
+.post-thumb.video,
+.post-thumb.gif {
+  position: relative;
+}
+.post-thumb .gif-tag {
+  bottom: 4px;
+  left: 4px;
+  padding: 0 4px;
+  font-size: 9px;
+}
+.post-thumb.video .m3-icon {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  color: #fff;
+  font-size: 28px;
+  font-variation-settings: 'FILL' 1;
+  filter: drop-shadow(0 1px 3px rgb(0 0 0 / 0.6));
+}
+/* a video on its way to the server, in the post form */
+.upload-progress {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(320px, 90%);
+}
+.upload-bar {
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--m3-surface-container-highest);
+}
+.upload-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--m3-primary);
+  transition: width 200ms;
+}
+#f-drop-inner video {
+  display: block;
+  max-width: 100%;
+  max-height: 360px;
+  margin: 0 auto;
+  border-radius: 12px;
+  background: #000;
+}
 .post-art .art-caption {
   position: absolute;
   bottom: 12px;
@@ -1230,6 +1296,15 @@ body.calm .spark {
 body.calm :is(.stat, .about-stats > div):has(.count) {
   display: none;
 }
+/* (1.0) something new is a dot, not a number to chase */
+body.calm :is(.badge, .badge-dot) {
+  min-width: 10px;
+  width: 10px;
+  height: 10px;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+}
 
 /* ---- feed bits ------------------------------------------------------------------ */
 
@@ -1287,15 +1362,16 @@ body.calm :is(.stat, .about-stats > div):has(.count) {
 .hello {
   position: relative;
   display: grid;
-  gap: 8px;
+  gap: 4px;
   overflow: hidden;
-  padding: 24px;
+  padding: 18px 20px;
   border-radius: var(--m3-r-very-large);
   background: linear-gradient(140deg, var(--m3-primary-container), var(--m3-tertiary-container));
   color: var(--m3-on-primary-container);
 }
 .hello h1 {
-  font-size: var(--m3-fs-headline);
+  padding-right: 40px;
+  font-size: 24px;
 }
 .hello p {
   max-width: 52ch;
@@ -1848,6 +1924,11 @@ body.calm :is(.stat, .about-stats > div):has(.count) {
   max-height: 360px;
   border-radius: var(--m3-r-normal);
 }
+/* a GIF from KLIPY (1.0): as big as the box allows, the same as it will look in the post */
+.drop img.gif-pick {
+  width: min(480px, 72vw);
+  object-fit: contain;
+}
 .drop .remove {
   position: absolute;
   top: 10px;
@@ -2013,6 +2094,10 @@ input[type='color'].color-input::-moz-color-swatch {
   width: 100%;
   height: 100%;
 }
+/* a second, third or fourth flag sits closer to the one before */
+.pride-flag + .pride-flag {
+  margin-inline-start: 0.18em;
+}
 /* in a big name it's a touch smaller than the letters, so the name leads */
 h1 .pride-flag,
 .np-text .pride-flag {
@@ -2110,6 +2195,14 @@ h1 .pride-flag,
 .flag-none {
   box-shadow: inset 0 0 0 1px var(--m3-outline-variant);
   color: var(--m3-on-surface-variant);
+}
+/* several flags in the edit-profile row, fanned out like a hand of cards */
+.flag-stack {
+  display: inline-flex;
+  flex: none;
+}
+.flag-stack .flag-big + .flag-big {
+  margin-inline-start: -26px;
 }
 /* four dots of a style's palette: primary, secondary, tertiary and the primary container */
 .scheme-dots {
@@ -3406,10 +3499,11 @@ html[data-m3-reduce-motion] :is(.nav-ind, .nav-ind .m3-icon, .enter) {
   animation: none !important;
 }
 
-/* ---- early access: the invite-code gate -------------------------------------------------- */
+/* ---- signing in and joining: the gate -------------------------------------------------------- */
 
-/* until someone is let in, only the gate shows, and the welcome page for someone not signed in */
-html.gated body > :not(.gate):not(.landing) {
+/* until someone is let in, only the gate shows, and the welcome page for someone not signed in (with its
+   language menu) */
+html.gated body > :not(.gate):not(.landing):not(.m3-menu) {
   display: none !important;
 }
 
@@ -3680,6 +3774,29 @@ html.visitor .landing {
 .landing-feature h3 {
   font-size: 19px;
   font-weight: 700;
+}
+/* on a phone (1.0) each one is a short row: its shape beside its words, so the page isn't one long column */
+@media (max-width: 600px) {
+  .landing-grid {
+    gap: 8px;
+  }
+  .landing-feature {
+    grid-template-columns: 48px minmax(0, 1fr);
+    column-gap: 14px;
+    row-gap: 2px;
+    padding: 14px 16px;
+  }
+  .landing-feature m3-shape-icon {
+    grid-row: span 2;
+    align-self: center;
+  }
+  .landing-feature h3 {
+    font-size: 17px;
+  }
+  .landing-feature p {
+    margin: 0;
+    font-size: 14px;
+  }
 }
 .landing-feature p {
   color: var(--m3-on-surface-variant);
@@ -4173,7 +4290,12 @@ body:has(.call-screen:not([hidden])) .m3-toaster {
   box-shadow: 0 6px 20px rgb(0 0 0 / 0.2);
 }
 .tag {
-  display: inline-block;
+  /* a row, so an icon in a tag sits level with its word */
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: middle;
+  line-height: 1.4;
   padding: 1px 8px;
   border-radius: var(--m3-r-full);
   background: var(--m3-tertiary-container);
@@ -4195,6 +4317,17 @@ body:has(.call-screen:not([hidden])) .m3-toaster {
   justify-content: flex-end;
   gap: 6px;
   margin-left: auto;
+}
+/* a name always has room: when the buttons are long (in German, say), they move under it */
+.person-row {
+  flex-wrap: wrap;
+}
+.person-row .row-text {
+  flex: 1 1 110px;
+  min-width: 110px;
+}
+.person-row .row-actions {
+  max-width: 100%;
 }
 .add-friend {
   display: grid;
@@ -4622,7 +4755,16 @@ button.chat-who {
   flex: none;
   transition: background-color 200ms, color 200ms;
 }
+/* the buttons sit level with one line of text (44px tall, they're 40), and stay at the bottom as it grows */
+.chat-send,
+.chat-box > .chat-tools {
+  margin-bottom: 2px;
+}
+/* a filled paper plane, nudged right: its weight is in its tail, so the middle of the box looks off without it */
 .chat-send .m3-icon {
+  --m3-icon-fill: 1;
+  --m3-icon-size: 22px;
+  translate: 1.5px 0;
   transition: rotate 320ms var(--m3-ease-emphasized-decel), translate 320ms var(--m3-ease-emphasized-decel);
 }
 .chat-send:disabled {
@@ -5140,6 +5282,14 @@ html[data-m3-reduce-motion] :is(.ring-halo, .ring-pic, .call-btn.answer .m3-icon
   position: relative;
   transition: opacity 200ms;
 }
+/* a voice call with one other person (1.0): their face is the call, so it's big, with their name under it */
+.call-screen[data-media='voice'] .call-stage[data-count='1'] .tile-face {
+  scale: 1.6;
+  margin-bottom: 36px;
+}
+.call-screen[data-media='voice'] .call-stage[data-count='1'] .tile-name {
+  font-size: var(--m3-fs-title, 1.25rem);
+}
 .call-tile[data-state='wait'] .tile-pic,
 .call-tile[data-state='failed'] .tile-pic {
   opacity: 0.55;
@@ -5257,6 +5407,25 @@ html[data-m3-reduce-motion] :is(.ring-halo, .ring-pic, .call-btn.answer .m3-icon
 .call-self.mirror {
   transform: scaleX(-1);
 }
+/* it can be dragged to any corner (1.0), and glides into the one it's let go near */
+.call-self {
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.call-self:active {
+  cursor: grabbing;
+}
+.call-self.settling {
+  transition: left 340ms var(--m3-ease-emphasized-decel), top 340ms var(--m3-ease-emphasized-decel);
+}
+/* a phone on its side: a smaller picture of you, so the others still have room */
+@media (max-height: 500px) {
+  .call-self {
+    width: 150px;
+  }
+}
 .call-self[hidden] {
   display: none;
 }
@@ -5278,6 +5447,24 @@ html[data-m3-reduce-motion] :is(.ring-halo, .ring-pic, .call-btn.answer .m3-icon
   padding: 12px;
   border-radius: 44px;
   background: var(--m3-surface-container-high);
+}
+/* a narrow phone: the buttons a little smaller and closer, so they stay in one row */
+@media (max-width: 420px) {
+  .call-controls {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 8px;
+  }
+  .call-controls .call-btn {
+    width: 56px;
+    height: 56px;
+  }
+  .call-controls .call-btn.wide {
+    width: 76px;
+  }
+  .call-controls .call-btn .m3-icon {
+    font-size: 26px;
+  }
 }
 .call-play {
   position: absolute;
@@ -6004,4 +6191,117 @@ html[data-m3-reduce-motion] .call-bg m3-shape {
 }
 .call-people .team-row {
   padding: 6px 0;
+}
+
+/* ---- 1.0: choosing the part of a picture to keep (profile pictures and banners) -------------------------- */
+
+.crop-stage {
+  position: relative;
+  height: min(58vh, 420px);
+  overflow: hidden;
+  border-radius: var(--m3-r-large);
+  background: #121014;
+  cursor: grab;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.crop-stage.banner {
+  height: min(38vh, 260px);
+}
+.crop-stage:active {
+  cursor: grabbing;
+}
+.crop-stage:focus-visible {
+  outline: 2px solid var(--m3-primary);
+  outline-offset: 2px;
+}
+.crop-img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  height: auto;
+  pointer-events: none;
+  will-change: transform;
+}
+/* the part that's kept: clear, everything around it dimmed */
+.crop-frame {
+  position: absolute;
+  top: var(--fy);
+  left: var(--fx);
+  width: var(--fw);
+  height: var(--fh);
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 0.58);
+  outline: 2px solid rgb(255 255 255 / 0.9);
+  pointer-events: none;
+}
+.crop-stage.banner .crop-frame {
+  border-radius: 14px;
+}
+.crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  color: var(--m3-on-surface-variant);
+}
+.crop-slider {
+  flex: 1;
+  accent-color: var(--m3-primary);
+}
+.crop-hint {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: var(--m3-fs-smaller);
+}
+
+/* ---- 1.0: a chat's colour, previewed as two bubbles in the colour picked --------------------------------- */
+
+.chat-swatch-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 20px;
+  background: var(--m3-surface-container-low);
+  color: var(--m3-on-surface);
+  transition: background-color 300ms;
+}
+.chat-swatch-preview .bubble {
+  justify-self: start;
+  padding: 8px 14px;
+  border-radius: 18px;
+  background: var(--m3-surface-container-highest);
+}
+.chat-swatch-preview .bubble.mine {
+  justify-self: end;
+  background: var(--m3-primary);
+  color: var(--m3-on-primary);
+}
+
+/* ---- 1.0: choosing the app's language ---------------------------------------------------------------------- */
+
+.lang-select {
+  max-width: 240px;
+}
+.lang-btn {
+  gap: 6px;
+}
+@media (max-width: 480px) {
+  /* a narrow phone: the welcome bar's language button is just its icon */
+  .lang-btn #lang-name {
+    display: none;
+  }
+  .lang-btn {
+    min-width: 40px;
+    padding: 0 8px;
+  }
+}
+@media (max-width: 420px) {
+  /* a small phone: the bar keeps Join (Sign in is right under the headline), so longer words still fit */
+  .landing-bar [data-gate='signin'] {
+    display: none;
+  }
 }

@@ -204,6 +204,29 @@ CREATE TABLE IF NOT EXISTS nest_bans (
   PRIMARY KEY (nook, user_id)
 );
 
+-- videos in posts (1.0): the MP4 itself is a file in the data folder's videos/, named by its id
+CREATE TABLE IF NOT EXISTS videos (
+  id TEXT PRIMARY KEY,
+  owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  poster TEXT NOT NULL DEFAULT '',
+  width INTEGER NOT NULL,
+  height INTEGER NOT NULL,
+  duration REAL NOT NULL,
+  size INTEGER NOT NULL,
+  post_id TEXT NOT NULL DEFAULT '',
+  review TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+
+-- the colour two friends picked for their chat (1.0), the lower user id first
+CREATE TABLE IF NOT EXISTS chat_themes (
+  a INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  b INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  color TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  PRIMARY KEY (a, b)
+);
+
 -- someone you've blocked (0.9.5): no friend requests, messages or calls either way, and they don't ring you
 CREATE TABLE IF NOT EXISTS blocks (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -258,7 +281,9 @@ function open(dir) {
     // a private message's kind ('' for words, 'call' for a call's line), and whether friends can call you ('' yes, 'off' no)
     ['messages', 'kind'], ['users', 'calls'],
     // a picture or GIF sent in a chat (JSON), and when a post was pinned to the top of its nest
-    ['messages', 'media'], ['group_messages', 'media'], ['posts', 'pinned_at']];
+    ['messages', 'media'], ['group_messages', 'media'], ['posts', 'pinned_at'],
+    // a video post's video, and a GIF post's GIF from KLIPY (JSON) (1.0)
+    ['posts', 'video'], ['posts', 'gif']];
   for (const [table, column] of LATER_COLUMNS) {
     if (!db.prepare(`PRAGMA table_info(${table})`).all().some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT NOT NULL DEFAULT ''`);
   }
