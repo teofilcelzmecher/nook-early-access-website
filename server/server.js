@@ -29,7 +29,7 @@ const textmodel = require('./textmodel');
 const video = require('./video');
 const makePush = require('./push');
 
-const VERSION = '1.2.0';
+const VERSION = '1.4.0';
 const TERMS = '1.0.0, 2026-10-30';
 const CONFIG = {
   port: Number(process.env.NOOK_PORT) || 8787,
@@ -280,9 +280,17 @@ const PRONOUNS_RE = /^[\p{L}\p{M}][\p{L}\p{M} /'’.,&-]{0,23}$/u;
 
 // ---- shaping rows for the app ------------------------------------------------------------------------
 
+// what the parts added in 1.4 (achievements, rewards, …) add to everyone's public profile: fn(row) => fields
+const USER_EXTRAS = [];
+// and what they add to "Export my data": fn(user) => { section: [...] }
+const EXPORT_EXTRAS = [];
+// 1.4: what else a chat message can carry ({ type: { read(user, body), out(media) } }: a sticker), and what else can
+// be reported and taken down ({ kind: { label, target(report), takeDown(id, reason, by) } }: stickers)
+const MEDIA_KINDS = {};
+const REPORT_KINDS = {};
 function publicUser(u) {
   const badges = badgesOf(u);
-  return {
+  const out = {
     name: u.name, color: u.color, shape: u.shape, icon: u.icon, photo: imageUrl(u.photo), photoGif: imageUrl(u.photo_gif),
     banner: imageUrl(u.banner), bannerGif: imageUrl(u.banner_gif), bio: u.bio, font: u.name_font || undefined,
     // up to four flags (from 1.0); `flag` is the first, for an app from before then
@@ -290,6 +298,8 @@ function publicUser(u) {
     scheme: u.profile_scheme || undefined, sticker: u.sticker_shape || undefined, badges: badges.length ? badges : undefined,
     createdAt: u.created_at, admin: u.role === 'admin' || undefined, banned: u.banned_at ? true : undefined, rev: u.rev,
   };
+  for (const extra of USER_EXTRAS) Object.assign(out, extra(u));
+  return out;
 }
 function meOut(u) {
   return Object.assign(publicUser(u), { role: u.role, joinedAt: u.created_at, calls: u.calls === 'off' ? 'off' : 'on' });
@@ -377,6 +387,7 @@ function mediaOut(json) {
   const m = JSON.parse(json);
   if (m.type === 'image') return { type: 'image', url: imageUrl(m.id), width: m.width, height: m.height, gif: m.gif };
   if (m.type === 'klipy') return { type: 'klipy', url: m.url, still: m.still, width: m.width, height: m.height, title: m.title };
+  if (MEDIA_KINDS[m.type]) return MEDIA_KINDS[m.type].out(m);
   return undefined;
 }
 /** a picture leaving with its message */
@@ -387,6 +398,10 @@ function dropMedia(json) {
 }
 /** reads what's attached to a message being sent: { media (to keep), picture (to save), review } or null */
 async function chatMedia(user, body) {
+  for (const kind of Object.values(MEDIA_KINDS)) {
+    const got = await kind.read(user, body);
+    if (got) return got;
+  }
   if (body.gif) {
     if (!db.meta('klipy-key')) fail(400, 'GIF search is off.');
     const url = text(body.gif.url, 600);
@@ -450,8 +465,8 @@ function notify(userId, note) {
 // the last change to the Terms or Privacy Policy that matters to people already here: they're told once
 // (the robot check on sign-up since 0.5.1 only concerns new accounts, so it isn't one)
 const NOTICE = {
-  version: '1.2.0, 2026-10-31',
-  text: 'Budgie is coming as an app to Android, iPhone, iPad and Mac, with notifications for messages, calls and replies. If you turn them on in an app, they reach your device through Google’s Firebase Cloud Messaging (Android) or Apple’s Push Notification service (iPhone, iPad and Mac), so Google or Apple gets your device’s notification token and what each notification says. The Privacy Policy says how: read it in Settings → Privacy and legal.',
+  version: '1.4.0, 2026-11-07',
+  text: 'Budgie’s Terms and Privacy Policy have changed for Budgie 1.4: achievements and streaks, profile rewards, Activity (what you listen to and play, from Last.fm, Steam or Budgie for Windows and Linux, shown to friends unless you choose otherwise), stickers and emojis, and nudges. To make bans hold, Budgie now keeps a scrambled form of the networks you use it from, never the address itself, for 90 days. Read them in Settings → Privacy and legal.',
 };
 if (db.meta('terms-told') !== NOTICE.version) {
   for (const u of db.all('SELECT id FROM users')) notify(u.id, { kind: 'system', text: NOTICE.text, symbol: 'gavel', shape: 'pixelCircle' });
@@ -763,7 +778,7 @@ route('POST', '/api/account/recovery', async ({ user, body }) => {
 
 route('GET', '/api/account/export', ({ user }) => {
   const id = user.id;
-  return {
+  const out = {
     exportedAt: new Date().toISOString(),
     note: 'Everything Budgie’s server holds about your account. Images are linked; open each link to download it.',
     profile: Object.assign(meOut(user), { termsAccepted: user.terms }),
@@ -788,6 +803,10 @@ route('GET', '/api/account/export', ({ user }) => {
     images: db.all('SELECT id, mime, created_at AS createdAt FROM images WHERE owner_id = ?', id).map((r) => ({ url: imageUrl(r.id), type: r.mime, createdAt: r.createdAt })),
     videos: db.all('SELECT * FROM videos WHERE owner_id = ?', id).map((v) => Object.assign(videoOut(v), { post: v.post_id || undefined, createdAt: v.created_at })),
   };
+  // what the parts added in 1.4 keep about the account: EXPORT_EXTRAS (achievements), and each part's exportFor
+  for (const extra of EXPORT_EXTRAS) Object.assign(out, extra(user));
+  for (const part of Object.values(modules)) if (part && typeof part.exportFor === 'function') Object.assign(out, part.exportFor(id));
+  return out;
 });
 
 /** wipes an account: its posts and comments are emptied and marked removed, everything else goes */
@@ -1516,7 +1535,9 @@ route('PATCH', '/api/me', async ({ user, body }) => {
   }
   const bioDoubt = next.bio !== user.bio ? await checkText([next.bio], 'profile') : null;
   if (body.font != null) {
-    if (body.font !== '' && !NAME_FONTS.includes(body.font)) fail(400, 'That isn’t one of Budgie’s name fonts.', { field: 'font' });
+    // 1.4: the fonts achievements unlock are rewards; server/rewards.js says whether this person may wear one
+    const mayWear = modules.rewards && modules.rewards.mayWearFont;
+    if (body.font !== '' && !NAME_FONTS.includes(body.font) && !(mayWear && mayWear(user, String(body.font)))) fail(400, 'That isn’t one of Budgie’s name fonts.', { field: 'font' });
     next.name_font = body.font;
   }
   if (body.pronouns != null) {
@@ -1619,13 +1640,13 @@ route('POST', '/api/notes/read', ({ user, body }) => {
 
 route('POST', '/api/reports', ({ user, body }) => {
   limit('report:' + user.id, 30, DAY);
-  const kind = ['post', 'comment', 'user', 'message', 'gmessage', 'group'].includes(body.kind) ? body.kind : null;
+  const kind = ['post', 'comment', 'user', 'message', 'gmessage', 'group'].includes(body.kind) || REPORT_KINDS[body.kind] ? body.kind : null;
   if (!kind) fail(400, 'Report a post, a comment, a person, a message or a group.');
   const target = text(body.id, 60);
   const reason = text(body.reason, 300) || 'No reason given';
   db.run('INSERT INTO reports (reporter_id, kind, target, reason, created_at) VALUES (?, ?, ?, ?, ?)', user.id, kind, target, reason, now());
   for (const admin of db.all("SELECT id FROM users WHERE role = 'admin'")) {
-    notify(admin.id, { kind: 'report', text: `New report: a ${KIND_LABEL[kind] || kind} for “${reason}”`, href: '#/admin', symbol: 'flag', shape: 'pixelCircle' });
+    notify(admin.id, { kind: 'report', text: `New report: a ${KIND_LABEL[kind] || (REPORT_KINDS[kind] && REPORT_KINDS[kind].label) || kind} for “${reason}”`, href: '#/admin', symbol: 'flag', shape: 'pixelCircle' });
   }
   return { ok: true };
 });
@@ -1707,7 +1728,7 @@ route('POST', '/api/messages', async ({ user, body }) => {
   const f = friendship(user.id, other.id);
   if (!f || f.status !== 'friends') fail(403, 'You can only message friends.');
   const messageBody = text(body.body, 2000);
-  if (!messageBody && !body.image && !body.gif) fail(400, 'Write something first.');
+  if (!messageBody && !body.image && !body.gif && body.sticker == null) fail(400, 'Write something first.');
   const verdict = vet([messageBody], { kind: 'message' });
   // in private messages the model only stops what it's very sure of, and only sexual ones are shown to a moderator
   const doubt = messageBody ? await checkText([messageBody], 'message') : null;
@@ -1719,7 +1740,7 @@ route('POST', '/api/messages', async ({ user, body }) => {
   if (verdict.flag) autoReport('message', Number(lastInsertRowid), verdict.flag.why);
   else if (attached && attached.review === 'review') autoReport('message', Number(lastInsertRowid), 'this picture might be sexual. Please take a look.');
   else if (doubt) autoReport('message', Number(lastInsertRowid), doubt);
-  push.send([other.id], { kind: 'message', title: 'u/' + user.name, body: messageBody, word: messageBody ? '' : body.gif ? 'gif' : 'picture', href: '#/messages/' + encodeURIComponent(user.name), tag: 'chat-' + user.name });
+  push.send([other.id], { kind: 'message', title: 'u/' + user.name, body: messageBody, word: messageBody ? '' : body.sticker != null ? 'sticker' : body.gif ? 'gif' : 'picture', href: '#/messages/' + encodeURIComponent(user.name), tag: 'chat-' + user.name });
   return { message: messageOut(db.get(`${MESSAGE_SELECT} WHERE m.id = ?`, Number(lastInsertRowid)), user.id) };
 }, { body: 6 * 1024 * 1024 });
 
@@ -1863,7 +1884,7 @@ route('POST', '/api/groups/:id/messages', async ({ user, params, body }) => {
   limit('message:' + user.id, 40, MINUTE, 'You’re sending messages very fast. Slow down a little.');
   const g = groupFor(user, params.id);
   const messageBody = text(body.body, 2000);
-  if (!messageBody && !body.image && !body.gif) fail(400, 'Write something first.');
+  if (!messageBody && !body.image && !body.gif && body.sticker == null) fail(400, 'Write something first.');
   const verdict = vet([messageBody], { kind: 'message' });
   const doubt = messageBody ? await checkText([messageBody], 'message') : null;
   const attached = await chatMedia(user, body);
@@ -1874,7 +1895,7 @@ route('POST', '/api/groups/:id/messages', async ({ user, params, body }) => {
   else if (attached && attached.review === 'review') autoReport('gmessage', id, 'this picture might be sexual. Please take a look.');
   else if (doubt) autoReport('gmessage', id, doubt);
   const others = db.all('SELECT user_id FROM group_members WHERE group_id = ? AND user_id != ?', g.id, user.id).map((m) => m.user_id).filter((uid) => !hasBlocked(uid, user.id));
-  push.send(others, { kind: 'message', title: g.name, body: `u/${user.name}: ${messageBody || (body.gif ? 'GIF' : '📷')}`, href: '#/messages/g/' + g.id, tag: 'group-' + g.id });
+  push.send(others, { kind: 'message', title: g.name, body: `u/${user.name}: ${messageBody || (body.sticker != null ? 'Sticker' : body.gif ? 'GIF' : '📷')}`, href: '#/messages/g/' + g.id, tag: 'group-' + g.id });
   return { message: gmessageOut(db.get(`${GMESSAGE_SELECT} WHERE m.id = ?`, id), user.id) };
 }, { body: 6 * 1024 * 1024 });
 
@@ -1953,6 +1974,15 @@ const RING_MS = Number(process.env.NOOK_RING_MS) || 35 * 1000; // NOOK_RING_MS s
 // a page reloaded mid-call has this long to come back before it counts as having left (NOOK_AWAY_MS, for the tests)
 const AWAY_MS = Number(process.env.NOOK_AWAY_MS) || 30 * 1000;
 const calls = new Map(); // id -> the call
+// calls that ended in the last half hour, and how long each person was in each call (1.4: the time someone shares
+// their screen counts towards an achievement, and it can't be more than they were in the call)
+const endedCalls = new Map();
+function callSpan(callId, userId) {
+  const c = calls.get(callId) || endedCalls.get(callId);
+  if (!c || !c.spent || !c.ever.has(userId)) return null;
+  const since = c.since.get(userId);
+  return (c.spent.get(userId) || 0) + (since ? (c.ended || now()) - since : 0);
+}
 const streams = new Map(); // user id -> their devices' open event streams
 const queues = new Map(); // user id -> the last two minutes of signals, for a device that polls instead of listening
 const lastSeen = new Map(); // user id -> when one of their devices was last in touch
@@ -2085,6 +2115,8 @@ const callOf = (userId) => [...calls.values()].find((c) => c.joined.has(userId))
 
 function newCall(user, media, { group = null, peer = null, ring }) {
   const c = { id: randomId('c', 9), media, group, peer, by: user.id, ringing: new Set(ring), joined: new Set([user.id]), ever: new Set([user.id]), started: now(), answered: 0 };
+  c.since = new Map([[user.id, c.started]]); // when each person in it came in
+  c.spent = new Map(); // and how long each was in it before, if they left and came back
   calls.set(c.id, c);
   const out = callOut(c);
   for (const id of ring) signal(id, 'call-ring', { call: out });
@@ -2144,6 +2176,7 @@ async function joinCall(c, user) {
   const peers = [...c.joined].filter((id) => id !== user.id);
   c.joined.add(user.id);
   c.ever.add(user.id);
+  if (!c.since.has(user.id)) c.since.set(user.id, now());
   c.ringing.delete(user.id);
   if (!c.answered && c.joined.size > 1) c.answered = now();
   const out = callOut(c);
@@ -2164,6 +2197,10 @@ function back(c, userId) {
 function leaveCall(c, userId) {
   back(c, userId);
   if (!c.joined.delete(userId)) return void c.ringing.delete(userId);
+  if (c.since.has(userId)) {
+    c.spent.set(userId, (c.spent.get(userId) || 0) + now() - c.since.get(userId));
+    c.since.delete(userId);
+  }
   for (const id of c.joined) signal(id, 'call-left', { call: c.id, user: nameOf(userId) });
   if (!c.answered) return endCall(c, 'cancelled');
   if (c.group ? c.joined.size === 0 : c.joined.size < 2) endCall(c, 'ended');
@@ -2172,6 +2209,9 @@ function leaveCall(c, userId) {
 function endCall(c, reason) {
   if (!calls.delete(c.id)) return;
   clearTimeout(c.timer);
+  c.ended = now();
+  endedCalls.set(c.id, c);
+  setTimeout(() => endedCalls.delete(c.id), 30 * MINUTE).unref();
   for (const timer of (c.away || new Map()).values()) clearTimeout(timer);
   for (const id of new Set([...c.ever, ...c.ringing, c.by, ...(c.peer ? [c.peer] : [])])) signal(id, 'call-ended', { call: c.id, reason, until: reason === 'limit' ? nextMonth() : undefined });
   // its line in the chat: how long it went on, or that nobody picked up
@@ -2351,6 +2391,7 @@ function reportTarget(r) {
     const owner = g && db.get("SELECT u.name FROM group_members gm JOIN users u ON u.id = gm.user_id WHERE gm.group_id = ? AND gm.role = 'owner'", g.id);
     return g ? { title: g.name, author: owner ? owner.name : '[deleted]' } : null;
   }
+  if (REPORT_KINDS[r.kind]) return REPORT_KINDS[r.kind].target(r);
   return null;
 }
 
@@ -2424,6 +2465,7 @@ function takeDown(kind, id, reason, by = 'A moderator', parts = null) {
     notify(u.id, { kind: 'moderation', text: `A moderator removed your ${list}. Reason: ${reason}. If you think this was a mistake, contact Budgie.`, href: '#/u/' + u.name, symbol: 'gavel', shape: 'pixelCircle' });
     return true;
   }
+  if (REPORT_KINDS[kind]) return REPORT_KINDS[kind].takeDown(id, reason, by);
   return false;
 }
 
@@ -2550,6 +2592,9 @@ async function handle(req, res) {
     res.writeHead(204);
     return res.end();
   }
+  // checks every request goes through first (1.4: a banned network): guard(req, url, ip) throws to refuse
+  const ip = req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : 'unknown';
+  for (const guard of REQUEST_GUARDS) await guard(req, url, ip);
   const image = /^\/api\/images\/([^/]+)$/.exec(url.pathname);
   if (image && req.method === 'GET') return serveImage(res, image[1]);
   const clip = /^\/api\/videos\/([A-Za-z0-9_-]{8,40})\.mp4$/.exec(url.pathname);
@@ -2564,7 +2609,7 @@ async function handle(req, res) {
     const ctx = {
       params,
       query: Object.fromEntries(url.searchParams),
-      ip: req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']).split(',')[0].trim() : 'unknown',
+      ip,
       body: ['POST', 'PUT', 'PATCH'].includes(req.method) && !r.upload ? await readBody(req, r.body) : {},
     };
     if (r.auth) {
@@ -2576,6 +2621,7 @@ async function handle(req, res) {
       if (r.admin && who.user.role !== 'admin') fail(403, 'Only admins can do that.');
       // any request means one of their devices is still there (for calls)
       lastSeen.set(who.user.id, now());
+      for (const seen of ON_AUTHED) seen(who.user, ctx);
     }
     // a stream writes its own answer, and keeps writing
     if (r.stream) return r.handler(Object.assign(ctx, { req, res }));
@@ -2604,6 +2650,31 @@ const server = http.createServer((req, res) => {
 server.requestTimeout = 5 * 60000;
 server.headersTimeout = 15000;
 
+// ---- the parts added in 1.4 ------------------------------------------------------------------------------------
+// Each is a module of its own (server/<name>.js) with install(ctx): it makes its own tables, adds its routes, and
+// returns what the others may use (ctx.modules.<name>). Installed in this order, so each can use the ones before it.
+const REQUEST_GUARDS = [];
+const ON_AUTHED = []; // fn(user, ctx) after a request is signed in
+const CLI = { commands: {}, help: [] }; // `nook <command>`s the modules add (cli.js lists and runs them)
+const modules = {};
+const moduleCtx = {
+  db, route, limit, fail, text, notify, now, push, CONFIG, VERSION, MINUTE, HOUR, DAY, readImage, saveImage, imageUrl, friendship, hasBlocked,
+  lastSeen, badgesOf, publicUser, takeDown, ban, pictures, textmodel, autoReport, USER_EXTRAS, REQUEST_GUARDS, ON_AUTHED, CLI, modules,
+  EXPORT_EXTRAS,
+  // true when this is the running server, false when cli.js loaded it for a command: timers only start when serving
+  serving: require.main === module,
+};
+// how long someone was in a call (1.4: screen-sharing time is capped by it)
+moduleCtx.callSpan = callSpan;
+// the free name fonts (rewards adds the ones achievements unlock)
+moduleCtx.NAME_FONTS = NAME_FONTS;
+// stickers in chats, and reports about them (1.4)
+moduleCtx.MEDIA_KINDS = MEDIA_KINDS;
+moduleCtx.REPORT_KINDS = REPORT_KINDS;
+// something for one person's open devices, over the live connection (1.4: a nudge arrives at once)
+moduleCtx.signal = signal;
+for (const name of ['stats', 'achievements', 'rewards', 'presence', 'stickers', 'social']) modules[name] = require('./' + name).install(moduleCtx) || {};
+
 if (require.main === module) {
   server.listen(CONFIG.port, CONFIG.host, () => {
     console.log(`Budgie server ${VERSION} on http://${CONFIG.host}:${CONFIG.port}, data in ${CONFIG.data}, allowing ${CONFIG.origins.join(', ')}`);
@@ -2615,4 +2686,4 @@ if (require.main === module) {
   process.on('SIGINT', stop);
 }
 
-module.exports = { checkRelayUsage, relayUsed, relayLimit, monthKey, server, db, CONFIG, VERSION, inviteHash, hashPassword, recoveryCode, recoveryHash, takeDown, ban, eraseUser, pictures, textmodel, autoReport, setBadge, badgesOf };
+module.exports = { checkRelayUsage, relayUsed, relayLimit, monthKey, server, db, CONFIG, VERSION, inviteHash, hashPassword, recoveryCode, recoveryHash, takeDown, ban, eraseUser, pictures, textmodel, autoReport, setBadge, badgesOf, modules, CLI };

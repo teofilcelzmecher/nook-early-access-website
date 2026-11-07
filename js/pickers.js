@@ -78,10 +78,13 @@
     const section = (id, label, items) =>
       `<section id="ep-${id}" data-group="${id}"><h4>${esc(label)}</h4><div class="ep-row">${items.map(([e, name]) => `<button type="button" data-emoji="${esc(e)}" title="${esc(name)}" aria-label="${esc(name)}">${e}</button>`).join('')}</div></section>`;
     const named = new Map(groups.flatMap((g) => g.items));
+    // your own emojis (1.4, js/stickers.js) come first, in a tab of their own
+    const yours = Nook.stickers && Nook.stickers.available() ? Nook.stickers.pickerSection() : '';
     el.innerHTML =
       '<input class="m3-field ep-search" type="search" placeholder="Search emoji" aria-label="Search emoji" autocomplete="off">' +
-      `<div class="ep-tabs">${recent.length ? tab('recent', 'history', 'Recent') : ''}${groups.map((g, i) => tab(i, g.symbol, g.name)).join('')}</div>` +
+      `<div class="ep-tabs">${yours ? tab('yours', 'add_reaction', 'Yours') : ''}${recent.length ? tab('recent', 'history', 'Recent') : ''}${groups.map((g, i) => tab(i, g.symbol, g.name)).join('')}</div>` +
       '<div class="ep-grid">' +
+      yours +
       (recent.length ? section('recent', 'Recent', recent.map((e) => [e, named.get(e) || e])) : '') +
       groups.map((g, i) => section(i, g.name, g.items)).join('') +
       '<p class="ep-none muted" hidden>No emoji found.</p></div>';
@@ -112,7 +115,9 @@
       const b = e.target.closest('[data-emoji]');
       if (!b) return;
       const picked = b.dataset.emoji;
-      remember.set(RECENT, [picked, ...remember.get(RECENT, []).filter((x) => x !== picked)].slice(0, 24));
+      // one of your own (:name:) is remembered with your stickers instead
+      if (b.dataset.custom) Nook.stickers.used(b.dataset.custom);
+      else remember.set(RECENT, [picked, ...remember.get(RECENT, []).filter((x) => x !== picked)].slice(0, 24));
       onPick(picked);
       fx.pop(b, 0.7);
     });
@@ -127,8 +132,8 @@
           b.hidden = !hit;
           if (hit) shown++;
         }
-        // while searching, recent emoji would only show twice
-        sec.hidden = !shown || (words.length && sec.dataset.group === 'recent');
+        // while searching, recent emoji would only show twice; your own (1.4) always show their + when not searching
+        sec.hidden = (!shown && !(sec.dataset.group === 'yours' && !words.length)) || (words.length && sec.dataset.group === 'recent');
         any = any || (!sec.hidden && shown > 0);
       }
       grid.querySelector('.ep-none').hidden = any;
@@ -142,7 +147,11 @@
     });
     if (matchMedia('(hover: hover)').matches) search.focus({ preventScroll: true });
 
-    const outside = (e) => !el.contains(e.target) && !anchor.contains(e.target) && closePicker();
+    const outside = (e) => {
+      if (el.contains(e.target) || anchor.contains(e.target)) return;
+      closePicker();
+      if (e.pointerType !== 'mouse') ui.eatClick();
+    };
     const keys = (e) => e.key === 'Escape' && (closePicker(), anchor.focus());
     setTimeout(() => document.addEventListener('pointerdown', outside, true));
     document.addEventListener('keydown', keys);
@@ -211,6 +220,9 @@
             page = 1;
             more = true;
             grid.innerHTML = '';
+            // the GIFs behind the buttons go with them: a search's results are numbered from the start again, and
+            // must not pick the trending GIF that used to be in that place
+            grid._items = [];
           }
           if (loading || !more) return;
           loading = true;
@@ -224,13 +236,16 @@
             const data = (json.data && json.data.data) || [];
             more = !!(json.data && json.data.has_next) && data.length > 0;
             page++;
+            // each button names its GIF by its place in grid._items (not among the buttons: a GIF without a preview
+            // has no button, and would shift every one after it)
+            const base = (grid._items || []).length;
             grid.insertAdjacentHTML(
               'beforeend',
               data
                 .map((item, i) => {
                   const preview = still ? fileOf(item, 'sm', ['jpg']) : fileOf(item, 'sm');
                   if (!preview) return '';
-                  return `<button type="button" class="gif-item" data-i="${grid.children.length + i}" aria-label="${esc(item.title || 'GIF')}"><img src="${esc(preview.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="aspect-ratio:${preview.width}/${preview.height}"></button>`;
+                  return `<button type="button" class="gif-item" data-i="${base + i}" aria-label="${esc(item.title || 'GIF')}"><img src="${esc(preview.url)}" alt="" loading="lazy" referrerpolicy="no-referrer" style="aspect-ratio:${preview.width}/${preview.height}"></button>`;
                 })
                 .join('')
             );
@@ -255,6 +270,7 @@
           const b = e.target.closest('.gif-item');
           if (!b) return;
           const item = grid._items[Number(b.dataset.i)];
+          if (!item) return;
           const file = fileOf(item, 'md') || fileOf(item, 'sm');
           const jpg = fileOf(item, 'md', ['jpg']) || fileOf(item, 'sm', ['jpg']);
           if (!file) return;

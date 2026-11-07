@@ -15,6 +15,13 @@
   const { esc, md, plain, ago, num, plural, icon, avatar, nookIcon, highlight, nameFont, prideFlag, specialBadges, devTag } = ui;
   const settings = () => store.state.settings;
   const app = () => Nook.app;
+  // Budgie's own words that are put together in code, said in the language (a sentence the page already holds is translated by js/i18n.js on its own)
+  const tr = (s) => (Nook.i18n ? Nook.i18n.t(s) : s);
+  // what a nest owner wrote is theirs and stays as written; Budgie's own starter nests, and the three flairs every nest starts with, are Budgie's words
+  const OWN = ' translate="no"';
+  const ownText = (c) => (c && !c.starter ? OWN : '');
+  const DEFAULT_FLAIRS = ['Discussion', 'Question', 'Show off'];
+  const ownFlair = (c, f) => (c && !c.starter && !DEFAULT_FLAIRS.includes(f) ? OWN : '');
 
   const SORT_LABELS = { hot: ['Hot', 'local_fire_department'], new: ['New', 'new_releases'], top: ['Top', 'trending_up'], rising: ['Rising', 'rocket'] };
 
@@ -149,16 +156,17 @@
     const head =
       '<header class="post-head">' +
       (inNook
-        ? `${avatar(u, 24)}<a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a>${prideFlag(u)}${devTag(u)}${roleTag(p.n, name)}`
-        : `<a class="nook-link" href="#/n/${c.id}">${nookIcon(c, 26, 15)}n/${esc(c.id)}</a><span class="dot"></span><a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a>${prideFlag(u)}${devTag(u)}${roleTag(p.n, name)}`) +
-      `<span class="dot"></span><time datetime="${when.toISOString()}" title="${esc(when.toLocaleString())}">${ago(p.createdAt)}</time>` +
+        ? `${avatar(u, 24)}<a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a>${prideFlag(u)}${devTag(u)}${Nook.hooksHTML('nameTags', u)}${roleTag(p.n, name)}`
+        : `<a class="nook-link" href="#/n/${c.id}">${nookIcon(c, 26, 15)}n/${esc(c.id)}</a><span class="by"><span class="dot"></span><a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a></span>${prideFlag(u)}${devTag(u)}${Nook.hooksHTML('nameTags', u)}${roleTag(p.n, name)}`) +
+      // the dot travels with what follows it, so a line that wraps never ends in a lone "·"
+      `<span class="when"><span class="dot"></span><time datetime="${when.toISOString()}" title="${esc(when.toLocaleString())}">${ago(p.createdAt)}</time></span>` +
       (p.pinned && (inNook || open) ? `<span class="tag pin">${icon('push_pin')}Pinned</span>` : '') +
       (p.spoiler ? `<span class="tag">${icon('visibility_off')}Spoiler</span>` : '') +
       `<button class="m3-icon-btn small post-more" data-act="post-menu" aria-label="More options"><span translate="no" class="m3-icon">more_horiz</span></button>` +
       '</header>';
 
     const title =
-      `<h2 class="post-title" id="t-${p.id}">${p.flair ? `<span class="flair">${esc(p.flair)}</span> ` : ''}` +
+      `<h2 class="post-title" id="t-${p.id}">${p.flair ? `<span class="flair"${ownFlair(c, p.flair)}>${esc(ownFlair(c, p.flair) ? p.flair : tr(p.flair))}</span> ` : ''}` +
       (open ? esc(clean(p.title)) : `<a href="${href}">${esc(clean(p.title))}</a>`) +
       '</h2>';
 
@@ -274,7 +282,7 @@
     return (
       '<section class="card">' +
       `<h3 class="card-title">${nookIcon(c, 32, 18)}<span>About n/${esc(c.id)}</span></h3>` +
-      `<p class="muted">${esc(c.description || c.tagline)}</p>` +
+      `<p class="muted"${ownText(c)}>${esc(c.description || c.tagline)}</p>` +
       `<div class="about-stats"><div><b class="count">${num(a.posts)}</b><span>Posts</span></div>` +
       `<div><b class="count">${num(a.comments)}</b><span>Comments</span></div></div>` +
       pulse(c) +
@@ -288,7 +296,7 @@
     if ((!c.rules || !c.rules.length) && !edit) return '';
     return (
       `<section class="card"><h3 class="card-title">${icon('gavel')}<span>Nest rules</span>${edit}</h3>` +
-      (c.rules && c.rules.length ? `<ol class="rules">${c.rules.map((r) => `<li>${esc(r)}</li>`).join('')}</ol>` : '<p class="muted">No rules yet.</p>') +
+      (c.rules && c.rules.length ? `<ol class="rules">${c.rules.map((r) => `<li${ownText(c)}>${esc(r)}</li>`).join('')}</ol>` : '<p class="muted">No rules yet.</p>') +
       '</section>'
     );
   }
@@ -319,22 +327,6 @@
     const b = store.bannedFrom(c.id);
     if (!b) return '';
     return `<div class="card banned-note" role="status">${icon('block')}<div><b>You can’t post or comment in n/${esc(c.id)}${b.until ? ' until ' + esc(new Date(b.until).toLocaleDateString([], { day: 'numeric', month: 'long' })) : ''}.</b><small>Reason: ${esc(b.reason)}. You can still read it.</small></div></div>`;
-  }
-
-  function streakCard() {
-    // calm mode (1.0): no streak to keep up
-    if (store.state.settings.calm) return '';
-    const s = store.state.streak;
-    const milestones = [3, 7, 14, 30, 100, 365];
-    const next = milestones.find((m) => m > s.count) || s.count + 1;
-    const left = next - s.count;
-    return (
-      '<section class="card">' +
-      `<div class="streak"><div class="streak-ring"><m3-squiggle progress="${(s.count / next).toFixed(3)}" thickness="5" aria-hidden="true"></m3-squiggle>${icon('local_fire_department')}</div>` +
-      `<div class="streak-text"><b class="m3-title">${plural(s.count, 'day')} streak</b>` +
-      `<span class="muted">${left} more day${left === 1 ? '' : 's'} to a ${next}-day streak. Best so far: ${s.best || s.count}.</span></div></div>` +
-      '</section>'
-    );
   }
 
   function trendingCard(limit = 5) {
@@ -390,7 +382,7 @@
       `<div class="c-side">${avatar(removed ? ghost : u, 30)}<button class="c-thread" data-act="collapse" aria-label="Collapse this thread"></button></div>` +
       '<div class="c-main">' +
       '<div class="c-head">' +
-      (removed ? '<span>[deleted]</span>' : `<a class="author${nameFont(u)}" href="#/u/${esc(name)}" translate="no">${esc(name)}</a>${prideFlag(u)}${devTag(u)}${roleTag((store.post(c.postId) || {}).n, name)}`) +
+      (removed ? '<span>[deleted]</span>' : `<a class="author${nameFont(u)}" href="#/u/${esc(name)}" translate="no">${esc(name)}</a>${prideFlag(u)}${devTag(u)}${Nook.hooksHTML('nameTags', u)}${roleTag((store.post(c.postId) || {}).n, name)}`) +
       (!removed && op ? '<span class="tag op">OP</span>' : '') +
       (!removed && mine ? '<span class="tag">You</span>' : '') +
       `<span>· ${ago(c.createdAt)}</span>${c.edited && !removed ? '<span>· edited</span>' : ''}<span class="c-hidden"></span></div>` +
@@ -399,7 +391,7 @@
         ? ''
         : '<div class="c-actions">' +
           voteBox('comment', c.id, store.commentScore(c), dir, true) +
-          `<button class="m3-btn text" data-act="reply">${icon('reply')}Reply</button>` +
+          `<button class="m3-btn text" data-act="reply" aria-label="Reply">${icon('reply')}<span class="reply-word">Reply</span></button>` +
           `<button class="m3-btn text" data-act="comment-share" aria-label="Share">${icon('ios_share')}<span class="not-phone">Share</span></button>` +
           `<button class="m3-icon-btn small" data-act="comment-menu" aria-label="More options for this comment"><span translate="no" class="m3-icon">more_horiz</span></button>` +
           '</div>') +
@@ -430,7 +422,10 @@
     return (
       '<form class="reply-box">' +
       `<textarea class="m3-field" rows="3" placeholder="${esc(placeholder)}" required>${esc(value)}</textarea>` +
-      `<div class="row"><button type="button" class="m3-icon-btn small only-hover" data-act="emoji" aria-label="Emoji" data-tooltip="Emoji">${icon('mood')}</button><span class="hint">**bold** *italic* \`code\` ||spoiler|| > quote</span>` +
+      `<div class="row"><button type="button" class="m3-icon-btn small only-hover" data-act="emoji" aria-label="Emoji" data-tooltip="Emoji">${icon('mood')}</button>` +
+      // your own emojis (1.4) on a phone, whose keyboard can't have them (a computer's emoji picker has a Yours tab)
+      (Nook.stickers && Nook.stickers.available() ? `<button type="button" class="m3-icon-btn small stk-touch" data-stk-act="emojis" aria-label="Your emojis">${icon('add_reaction')}</button>` : '') +
+      `<span class="hint">**bold** *italic* \`code\` ||spoiler|| > quote</span>` +
       `<button type="button" class="m3-btn text" data-act="reply-cancel">Cancel</button>` +
       `<button type="submit" class="m3-btn filled">${icon('send')}${esc(submitLabel)}</button></div></form>`
     );
@@ -550,7 +545,7 @@
         `<div class="nook-hero-actions">${joinButton(c, false)}` +
         (store.nestPerms(c).length && serverAt('0.9.5') ? `<a class="m3-icon-btn tonal" href="#/n/${esc(c.id)}/manage" aria-label="Manage n/${esc(c.id)}" data-tooltip="Manage">${icon('tune')}</a>` : '') +
         `<button class="m3-icon-btn tonal" data-act="nook-menu" data-nook="${c.id}" aria-label="More" data-tooltip="More"><span translate="no" class="m3-icon">more_horiz</span></button></div></div>` +
-        `<p class="nook-tagline" translate="no">${esc(c.tagline)}</p>` +
+        `<p class="nook-tagline"${ownText(c)}>${esc(c.tagline)}</p>` +
         pulse(c) +
         '</section>' +
         bannedNote(c) +
@@ -559,7 +554,7 @@
         // nobody banned from the nest is offered a Post button the server will refuse
         `${store.bannedFrom(c.id) ? '' : `<a class="m3-btn filled small" href="#/submit?n=${c.id}">${icon('edit')}Post</a>`}${compactToggle()}</div>` +
         (flairs.length
-          ? `<div class="chips" role="group" aria-label="Filter by flair"><button class="chip" data-m3-ripple data-flair="" aria-pressed="true">All</button>${flairs.map((f) => `<button class="chip" data-m3-ripple data-flair="${esc(f)}" aria-pressed="false">${esc(f)}</button>`).join('')}</div>`
+          ? `<div class="chips" role="group" aria-label="Filter by flair"><button class="chip" data-m3-ripple data-flair="" aria-pressed="true">All</button>${flairs.map((f) => `<button class="chip" data-m3-ripple data-flair="${esc(f)}" aria-pressed="false"${ownFlair(c, f)}>${esc(f)}</button>`).join('')}</div>`
           : '') +
         feedShell() +
         `</div><aside class="rail">${aboutCard(c)}${rulesCard(c)}${modsCard(c)}${footCard()}</aside></div>`,
@@ -653,7 +648,7 @@
             `<article class="nook-card" data-tint="${c.color}" data-tint-always data-href="#/n/${c.id}" data-m3-ripple data-m3-bounce data-m3-hover-root tabindex="0" aria-label="${esc(c.title)}, n/${esc(c.id)}" data-m3-stickers="card-${c.id}" data-count="3" data-min="60" data-max="130" data-clip-radius="23">` +
             `<div class="nc-top"><m3-shape-icon shape="${c.shape}" symbol="${c.symbol}" size="56" icon-size="28"></m3-shape-icon>${joinButton(c)}</div>` +
             `<h3 class="m3-title" translate="no">${esc(c.title)}</h3><div class="meta">n/${esc(c.id)}<span class="count"> · ${a.posts ? plural(a.posts, 'post') : 'no posts yet'}</span></div>` +
-            `<p translate="no">${esc(c.tagline)}</p><m3-wavy-progress value="${a.level}"${a.week ? ' playing' : ''} aria-label="Activity: ${a.mood}"></m3-wavy-progress></article>`
+            `<p${ownText(c)}>${esc(c.tagline)}</p><m3-wavy-progress value="${a.level}"${a.week ? ' playing' : ''} aria-label="Activity: ${a.mood}"></m3-wavy-progress></article>`
         )
         .join('');
     return {
@@ -775,13 +770,6 @@
       .filter(Boolean)
       .slice(0, 6);
     const joinedDays = Math.max(1, Math.round((Date.now() - (me ? s.me.joinedAt : u.createdAt || Date.now())) / 86400000));
-    const badges = me
-      ? `<section class="section"><header class="m3-section-header" data-m3-hover-root><m3-shape-icon shape="burst" symbol="military_tech" size="34" icon-size="18"></m3-shape-icon><h2 class="m3-title">Badges</h2><m3-wavy-line></m3-wavy-line><span class="muted">${Object.keys(s.badges).length}/${store.BADGES.length}</span></header>` +
-        `<div class="badges">${store.BADGES.map((b) => {
-          const got = !!s.badges[b.id];
-          return `<div class="badge-tile${got ? '' : ' locked'}" data-tooltip="${esc(b.desc)}"><m3-shape-icon shape="${b.shape}" symbol="${got ? b.symbol : 'lock'}" size="52" icon-size="24"></m3-shape-icon><b translate="no">${esc(b.name)}</b><small>${esc(b.desc)}</small></div>`;
-        }).join('')}</div></section>`
-      : '';
     const banner = ui.bannerImage(u);
     const who = me ? Object.assign({}, u, s.me) : u;
     // the shapes floating behind it: a mix, the owner's favourite, or none
@@ -800,6 +788,7 @@
         `<div class="profile-main">${avatar(u, 96, { moving: true })}<div class="who"><h1 class="m3-title${who.flag ? ' has-flag' : ''}" style="--name-len: ${u.name.length}"><span class="${nameFont(who).trim()}" translate="no">${esc(u.name)}</span>${prideFlag(who)}</h1>` +
         `<span class="muted">u/${esc(u.name)}${who.pronouns ? ` · <span class="pronouns">${esc(who.pronouns)}</span>` : ''} · joined ${joinedDays <= 1 ? 'today' : plural(joinedDays, 'day') + ' ago'}${u.admin ? ' · <span class="tag">Admin</span>' : ''}${u.banned ? ' · <span class="tag">Banned</span>' : ''}</span>` +
         specialBadges(who) +
+        Nook.hooksHTML('profileHero', u, who, me) +
         (u.bio ? `<div class="md bio">${md(clean(u.bio))}</div>` : me ? '<p class="muted bio">No bio yet. Tell people what you’re into!</p>' : '') +
         (interests.length ? `<div class="interests" aria-label="Into">${interests.map(([, label, symbol]) => `<span class="chip static">${icon(symbol)}${label}</span>`).join('')}</div>` : '') +
         '</div>' +
@@ -809,7 +798,7 @@
           ? ''
           : store.isBlocked(u.name)
           ? `<div class="toolbar profile-actions"><button class="m3-btn tonal" data-act="unblock" data-user="${esc(u.name)}">${icon('lock_open')}Unblock</button></div><p class="muted blocked-note">${icon('block')}You blocked u/${esc(u.name)}. They can’t message you, call you or add you, and their posts and comments are hidden from you.</p>`
-          : `<div class="toolbar profile-actions">${friendButtons(u.name)}${store.isDev() ? testerButton(u) : ''}` +
+          : `<div class="toolbar profile-actions">${friendButtons(u.name)}${store.isDev() ? testerButton(u) : ''}${Nook.hooksHTML('profileActions', u, who, me)}` +
             // Report and Block, under one button so the row fits a phone
             (store.state.canBlock
               ? `<button class="m3-icon-btn tonal" data-act="person-menu" data-user="${esc(u.name)}" aria-label="More for u/${esc(u.name)}: report or block" data-tooltip="Report or block">${icon('more_vert')}</button>`
@@ -819,15 +808,15 @@
         `<div class="stat" title="Every upvote on their posts and comments is a feather"><b class="count">${num(st.feathers)}</b><span>Feathers</span></div>` +
         `<div class="stat"><b class="count">${num(st.posts.length)}</b><span>Posts</span></div>` +
         `<div class="stat"><b class="count">${num(st.comments.length)}</b><span>Comments</span></div>` +
-        (me && !s.settings.calm ? `<div class="stat"><b>${plural(s.streak.count, 'day')}</b><span>Streak</span></div>` : '') +
         '</div></section>' +
-        badges +
+        // achievements and the streak (1.4, js/achievements.js) live here, where the badges were
+        Nook.hooksHTML('profileSections', u, who, me) +
         `<div class="toolbar">${segmented('profile-tab', [['posts', 'Posts', 'article'], ['comments', 'Comments', 'forum']], 'posts', 'Show')}</div>` +
         '<div id="profile-list">' +
         feedShell() +
         '</div>' +
         '</div><aside class="rail">' +
-        (me ? streakCard() : '') +
+        Nook.hooksHTML('profileRail', u, who, me) +
         (where.length
           ? `<section class="card"><h3 class="card-title">${icon('location_on')}<span>${me ? 'Where you hang out' : 'Hangs out in'}</span></h3><div class="list">${where
               .map((c) => `<a class="row-link" href="#/n/${c.id}" data-m3-ripple>${nookIcon(c, 32, 17)}<span class="row-text"><b>n/${esc(c.id)}</b><small translate="no">${esc(c.title)}</small></span></a>`)
@@ -845,7 +834,7 @@
           if (tab === 'posts') {
             box.innerHTML = feedShell();
             const sorted = [...st.posts].sort((a, b) => b.createdAt - a.createdAt);
-            mountFeed(box, sorted, {}, empty('edit_note', me ? 'You haven’t posted yet' : 'No posts yet', me ? 'Your first post earns you a badge.' : 'They’re more of a commenter.', me ? `<a class="m3-btn filled" href="#/submit">${icon('edit')}Create a post</a>` : ''));
+            mountFeed(box, sorted, {}, empty('edit_note', me ? 'You haven’t posted yet' : 'No posts yet', me ? 'Your first post earns you an achievement.' : 'They’re more of a commenter.', me ? `<a class="m3-btn filled" href="#/submit">${icon('edit')}Create a post</a>` : ''));
           } else {
             const list = [...st.comments].sort((a, b) => b.createdAt - a.createdAt);
             box.innerHTML = list.length
@@ -861,6 +850,7 @@
         };
         show('posts');
         root.querySelector('#profile-tab').addEventListener('change', (e) => show(e.detail.value));
+        Nook.runHooks('profileMount', root, u, me);
       },
     };
   }
@@ -883,7 +873,7 @@
                   `<span class="note-text"><span>${esc(n.text)}</span><small>${ago(n.createdAt)}</small></span></button>`
               )
               .join('')}</div>`
-          : empty('notifications_off', 'All quiet', 'Replies, friend requests and the badges you earn show up here.')) +
+          : empty('notifications_off', 'All quiet', 'Replies, friend requests and the achievements you earn show up here.')) +
         '</div></div>',
     };
   }
@@ -957,7 +947,7 @@
         sw('set-tintPosts', 'Tint posts by their nest', 'In mixed feeds, each card takes its nest’s colours.', s.tintPosts) +
         sw('set-reduceMotion', 'Reduce motion', 'Stop things that move on their own and keep pages still as they change.', s.reduceMotion) +
         sw('set-haptics', 'Haptic taps', 'A tiny buzz when you vote, spark, save or join, on phones that can.', s.haptics !== false) +
-        sw('set-nameFonts', 'Name fonts', 'Show names in the fonts people picked for them. Off, every name is in Budgie’s own font.', s.nameFonts !== false) +
+        sw('set-nameFonts', 'Name fonts', 'Show names in the fonts and effects people picked for them. Off, every name is plain, in Budgie’s own font.', s.nameFonts !== false) +
         (ui.theme.offline ? '<p class="muted">Couldn’t load the colour library (offline?), so only the built-in scheme is available right now.</p>' : '') +
         '</div></section>' +
         `<section>${header('cookie9', 'dynamic_feed', 'Feed')}<div class="card setting-card">` +
@@ -973,7 +963,7 @@
           ? `<section>${header('clover8', 'call', 'Calls')}<div class="card setting-card">` +
             sw('set-calls', 'Let friends call me', 'Voice and video calls from your friends and the groups you’re in. Off, nobody can ring you, but you can still call them.', store.state.me.calls !== 'off') +
             (serverAt('0.9.5') && Nook.calls
-              ? `<div class="setting-row"><span class="label">Ringtone</span>${segmented('set-ringtone', Nook.calls.RINGTONES.map((id) => [id, id[0].toUpperCase() + id.slice(1)]), s.ringtone || 'budgie', 'Ringtone')}</div>` +
+              ? `<div class="setting-row"><span class="label">Ringtone</span>${segmented('set-ringtone', Nook.calls.RINGTONES.map((id) => [id, ({ budgie: 'Budgie', chime: 'Chime', pulse: 'Pulse', classic: 'Classic', silent: 'Silent' })[id] || id[0].toUpperCase() + id.slice(1)]), s.ringtone || 'budgie', 'Ringtone')}</div>` +
                 `<div class="toolbar"><button class="m3-btn tonal" data-act="call-look">${icon('palette')}Call look</button><button class="m3-btn text" data-act="ring-preview">${icon('volume_up')}Hear the ringtone</button></div>`
               : '') +
             '<p class="muted">Calls go straight between devices, encrypted, and are never recorded. As with any direct call, the people in a call can see your device’s internet (IP) address, unless it goes through Budgie’s relay. Only call people you trust.</p>' +
@@ -988,6 +978,7 @@
               : '<p class="muted">Nobody. You can block someone from their profile, or from the More menu in a chat with them. They aren’t told.</p>') +
             '</div></section>'
           : '') +
+        Nook.hooksHTML('settingsSections', header) +
         `<section>${header('pixelCircle', 'manage_accounts', 'Account')}<div class="card setting-card">` +
         `<div class="about-app">${avatar(store.user(store.ME), 48)}<div><b class="m3-title">u/${esc(store.state.me.name)}</b><span class="muted">Signed in${store.isAdmin() ? ' · Admin' : ''}</span></div></div>` +
         `<div class="toolbar"><button class="m3-btn tonal" data-act="change-password">${icon('password')}Change password</button><button class="m3-btn tonal" data-act="new-recovery">${icon('key')}New recovery code</button><button class="m3-btn tonal" data-act="export">${icon('download')}Export my data</button></div>` +
@@ -1081,6 +1072,7 @@
           $('#set-break-out').textContent = slider.format(s.breakMinutes);
           apply();
         });
+        Nook.runHooks('settingsMount', root);
       },
     };
   }
@@ -1103,7 +1095,7 @@
         '<form class="card form" id="submit-form" novalidate>' +
         `<div class="field"><span class="field-label">Posting in</span><button type="button" class="picker-btn" id="nook-picker" aria-haspopup="menu">${nookIcon(nook, 32, 18)}<span id="nook-picker-name">n/${esc(nook.id)}</span>${icon('expand_more')}</button></div>` +
         // a picture or GIF, or (when the server takes them, from 1.0) a video
-        `<div>${segmented('post-type', [['text', 'Text', 'notes'], ['image', s.videos ? 'Media' : 'Image', s.videos ? 'perm_media' : 'image'], ['link', 'Link', 'link'], ['poll', 'Poll', 'ballot']], type === 'video' ? 'image' : type, 'Post type')}</div>` +
+        `<div class="segments-row">${segmented('post-type', [['text', 'Text', 'notes'], ['image', s.videos ? 'Media' : 'Image', s.videos ? 'perm_media' : 'image'], ['link', 'Link', 'link'], ['poll', 'Poll', 'ballot']], type === 'video' ? 'image' : type, 'Post type')}</div>` +
         `<div class="field"><label for="f-title">Title</label><input class="m3-field" id="f-title" maxlength="300" required placeholder="An interesting title" value="${esc(draft.title || '')}"><span class="counter" id="f-title-count">0/300</span><span class="error" id="f-title-err"></span></div>` +
         `<div class="field"><span class="field-label">Flair</span><div class="chips" id="f-flairs" role="group" aria-label="Flair"></div></div>` +
         // image
@@ -1120,8 +1112,8 @@
         // body
         `<div class="field"><div class="toolbar" style="justify-content:space-between"><label for="f-body" class="field-label">Body <span class="muted" id="f-body-optional">(optional)</span></label>${segmented('body-mode', [['write', 'Write'], ['preview', 'Preview']], 'write', 'Body mode')}</div>` +
         '<div id="f-write"><div class="format-bar" role="toolbar" aria-label="Formatting">' +
-        [['bold', 'format_bold', '**', '**'], ['italic', 'format_italic', '*', '*'], ['code', 'code', '`', '`'], ['link', 'link', '[', '](https://)'], ['quote', 'format_quote', '> ', ''], ['list', 'format_list_bulleted', '- ', ''], ['spoiler', 'visibility_off', '||', '||']]
-          .map(([name, sym, a, b]) => `<button type="button" class="m3-icon-btn small" data-wrap-a="${esc(a)}" data-wrap-b="${esc(b)}" aria-label="${name}" data-tooltip="${name[0].toUpperCase() + name.slice(1)}"><span translate="no" class="m3-icon">${sym}</span></button>`)
+        [['bold', 'Bold', 'format_bold', '**', '**'], ['italic', 'Italic', 'format_italic', '*', '*'], ['code', 'Code', 'code', '`', '`'], ['link', 'Link', 'link', '[', '](https://)'], ['quote', 'Quote', 'format_quote', '> ', ''], ['list', 'List', 'format_list_bulleted', '- ', ''], ['spoiler', 'Spoiler', 'visibility_off', '||', '||']]
+          .map(([name, label, sym, a, b]) => `<button type="button" class="m3-icon-btn small" data-wrap-a="${esc(a)}" data-wrap-b="${esc(b)}" aria-label="${label}" data-tooltip="${label}"><span translate="no" class="m3-icon">${sym}</span></button>`)
           .join('') +
         `</div><textarea class="m3-field" id="f-body" rows="7" placeholder="Say more (optional). Markdown-lite works: **bold**, *italic*, lists, > quotes.">${esc(draft.body || '')}</textarea></div>` +
         '<div id="f-preview" class="preview-box md" hidden></div></div>' +
@@ -1152,7 +1144,7 @@
 
   const personRowHTML = (u, actions) =>
     `<div class="row-link person-row" data-href="#/u/${encodeURIComponent(u.name)}" tabindex="0" role="link" aria-label="u/${esc(u.name)}" data-m3-ripple data-m3-hover-root>${avatar(u, 44)}` +
-    `<span class="row-text"><b class="${nameFont(u).trim()}">u/${esc(u.name)}${prideFlag(u)}</b><small>${u.pronouns ? esc(u.pronouns) + ' · ' : ''}${esc(clean(u.bio || '')) || 'Joined ' + ago(u.createdAt || Date.now())}</small></span><span class="row-actions">${actions}</span></div>`;
+    `<span class="row-text"><b class="${nameFont(u).trim()}">u/${esc(u.name)}${prideFlag(u)}</b><small>${u.pronouns ? esc(u.pronouns) + ' · ' : ''}${esc(clean(u.bio || '')) || `Joined ${ago(u.createdAt || Date.now())}`}</small>${Nook.hooksHTML('personRow', u)}</span><span class="row-actions">${actions}</span></div>`;
 
   function friendsPage() {
     const incoming = store.friends('incoming');
@@ -1291,7 +1283,7 @@
     const names = (d.names || []).map((n) => 'u/' + n).join(', ');
     switch (d.type) {
       case 'created':
-        return `${who} made the group${names ? ' with ' + names : ''}`;
+        return names ? `${who} made the group with ${names}` : `${who} made the group`;
       case 'added':
         return `${who} added ${names}`;
       case 'removed':
@@ -1315,10 +1307,12 @@
   const mediaWord = (x) => (x.type === 'klipy' || x.gif ? 'GIF' : 'Photo');
   /** the last message, for a list of chats */
   const preview = (m, inGroup) =>
-    !m ? '' : m.kind ? lineText(m, inGroup) : (m.mine ? 'You: ' : inGroup && m.from ? m.from + ': ' : '') + (m.body ? plain(clean(m.body), 80) : m.media ? (mediaWord(m.media) === 'GIF' ? 'GIF' : '📷 Photo') : '');
+    !m ? '' : m.kind ? lineText(m, inGroup) : (m.mine ? tr('You') + ': ' : inGroup && m.from ? m.from + ': ' : '') + (m.body ? plain(clean(m.body), 80) : m.media ? (m.media.type === 'sticker' ? 'Sticker' : mediaWord(m.media) === 'GIF' ? 'GIF' : '📷 Photo') : '');
 
   /** a picture or GIF in a bubble; it opens full size when pressed */
   function mediaHTML(x) {
+    // a sticker (1.4) is drawn big, without a bubble (js/stickers.js)
+    if (x.type === 'sticker' && Nook.stickers) return Nook.stickers.mediaHTML(x);
     const moving = !ui.motionOff();
     const src = x.local || (x.type === 'klipy' && !moving && x.still ? x.still : Nook.api.url(x.url));
     const label = x.type === 'klipy' ? x.title || 'GIF' : mediaWord(x);
@@ -1384,9 +1378,10 @@
       .map((m, i) => {
         const where = n === 1 ? 'solo' : i === 0 ? 'first' : i === n - 1 ? 'last' : 'mid';
         const words = (m.body || '').trim();
-        const big = !m.media && JUMBO.test(words) ? ' jumbo' : '';
+        // up to three emoji on their own are drawn big, custom ones (1.4) among them
+        const big = !m.media && (JUMBO.test(words) || (Nook.stickers && Nook.stickers.jumbo(words))) ? ' jumbo' : '';
         const state = m.failed ? ' failed' : m.pending ? ' pending' : '';
-        const media = m.media ? ' has-media' + (words ? '' : ' only-media') : '';
+        const media = m.media ? ' has-media' + (words ? '' : ' only-media') + (m.media.type === 'sticker' ? ' is-sticker' : '') : '';
         return (
           `<div class="bubble ${where}${big}${state}${media}" data-message="${esc(String(m.id))}" title="${esc(new Date(m.createdAt).toLocaleString())}">` +
           (m.media ? mediaHTML(m.media) : '') +
@@ -1430,6 +1425,7 @@
       // a real file box under your finger, as the profile's photo pickers have: phones open it reliably
       `<label class="m3-icon-btn chat-tool photo-pick" data-tooltip="Photo or GIF">${icon('add_photo_alternate')}<input type="file" class="chat-file" accept="image/*" aria-label="Send a photo or GIF"></label>` +
       (Nook.pickers && Nook.pickers.gifsOn() ? `<button type="button" class="m3-icon-btn chat-tool" data-chat="gif" aria-label="Find a GIF" data-tooltip="GIFs">${icon('gif_box')}</button>` : '') +
+      (Nook.stickers && Nook.stickers.available() ? `<button type="button" class="m3-icon-btn chat-tool" data-chat="sticker" aria-label="Stickers and your emojis" data-tooltip="Stickers">${icon('sticky_note_2')}</button>` : '') +
       `<button type="button" class="m3-icon-btn chat-tool only-hover" data-chat="emoji" aria-label="Emoji" data-tooltip="Emoji">${icon('mood')}</button>` +
       '</div>'
     );
@@ -1462,6 +1458,8 @@
     const toEnd = (smooth) => scrollTo({ top: end(), behavior: smooth && !Nook.fx.reduced() ? 'smooth' : 'auto' });
 
     function arrive(el) {
+      // a sticker (1.4) is slapped down instead
+      if (el.classList.contains('is-sticker') && Nook.stickers) return Nook.stickers.popIn(el);
       const mine = !!el.closest('.mine');
       el.style.transformOrigin = mine ? '100% 100%' : '0 100%';
       Nook.fx.play(el, [{ opacity: 0, scale: 0.5, translate: `${mine ? 12 : -12}px 16px` }, { opacity: 1, scale: 1, translate: '0 0' }], {
@@ -1578,6 +1576,12 @@
       if (!tool || !Nook.pickers) return;
       const kind = tool.dataset.chat;
       if (kind === 'emoji') return Nook.pickers.emoji(tool, (emoji) => Nook.pickers.insertAt(input, emoji));
+      if (kind === 'sticker' && Nook.stickers) {
+        // a sticker goes as soon as it's picked, as its own message; one of your emojis goes where you're writing
+        const s = await Nook.stickers.pick({ field: input });
+        if (s) queue({ id: store.uid('local'), body: '', createdAt: Date.now(), mine: true, media: Nook.stickers.localMedia(s), extra: { sticker: s.id } });
+        return;
+      }
       if (kind === 'gif') {
         // a GIF goes as soon as it's picked, as its own message
         const g = await Nook.pickers.gif();
@@ -1671,12 +1675,16 @@
       const m = c.thread().messages.find((x) => String(x.id) === bubble.dataset.message);
       if (!m) return;
       Nook.fx.haptic(10);
+      const sticker = m.media && m.media.type === 'sticker' && Nook.stickers;
       ui.sheet({
         html:
           (m.body ? `<div class="msg-menu-quote">${esc(plain(clean(m.body), 160))}</div>` : '') +
+          (sticker ? Nook.stickers.menuHead(m) : '') +
           '<div class="list">' +
           (m.body ? `<button type="button" class="row-link" data-do="copy" data-m3-ripple>${icon('content_copy')}<span class="row-text"><b>Copy text</b></span></button>` : '') +
-          (m.media ? `<button type="button" class="row-link" data-do="open" data-m3-ripple>${icon('open_in_full')}<span class="row-text"><b>Open ${m.media.type === 'klipy' || m.media.gif ? 'GIF' : 'photo'}</b></span></button>` : '') +
+          // a sticker (1.4): save it, or report it to the moderators
+          (sticker ? Nook.stickers.menuRows(m) : '') +
+          (m.media && m.media.type !== 'sticker' ? `<button type="button" class="row-link" data-do="open" data-m3-ripple>${icon('open_in_full')}<span class="row-text"><b>Open ${m.media.type === 'klipy' || m.media.gif ? 'GIF' : 'photo'}</b></span></button>` : '') +
           (m.mine ? '' : `<button type="button" class="row-link" data-do="report" data-m3-ripple>${icon('flag')}<span class="row-text"><b>Report message</b><small>Moderators will see it, and who sent it</small></span></button>`) +
           '</div>',
         setup(body, close) {
@@ -1684,7 +1692,8 @@
             const act = e.target.closest('[data-do]');
             if (!act) return;
             close(null);
-            if (act.dataset.do === 'copy') navigator.clipboard.writeText(m.body).then(() => M3.snackbar('Copied'), () => M3.snackbar('Couldn’t copy that.'));
+            if (act.dataset.do.startsWith('sticker-')) Nook.stickers.menuAction(act.dataset.do, m);
+            else if (act.dataset.do === 'copy') navigator.clipboard.writeText(m.body).then(() => M3.snackbar('Copied'), () => M3.snackbar('Couldn’t copy that.'));
             else if (act.dataset.do === 'open') Nook.pickers.view(Nook.api.url(m.media.url), 'Picture');
             else app().report(c.reportKind, { id: m.id });
           });
@@ -1716,7 +1725,7 @@
     const friends = store.friendStatus(u.name) === 'friends';
     const head =
       `<div class="chat-head"><a class="m3-toolbar-btn" href="#/messages" data-effect="nudge-left" data-shape="cookie7" aria-label="All messages">${icon('arrow_back')}</a>` +
-      `<a class="chat-who" href="#/u/${encodeURIComponent(u.name)}">${avatar(u, 40, { moving: true })}<span><b class="${nameFont(u).trim()}" translate="no">${esc(u.name)}</b>${prideFlag(u)}<small>${friends ? 'Friends' : 'u/' + esc(u.name)}${u.pronouns ? ' · ' + esc(u.pronouns) : ''}</small></span></a>` +
+      `<a class="chat-who" href="#/u/${encodeURIComponent(u.name)}">${avatar(u, 40, { moving: true })}<span><b class="${nameFont(u).trim()}" translate="no">${esc(u.name)}</b>${prideFlag(u)}<small>${friends ? 'Friends' : 'u/' + esc(u.name)}${u.pronouns ? ' · ' + esc(u.pronouns) : ''}</small>${Nook.hooksHTML('chatHead', u)}</span></a>` +
       (friends ? callButtons(`data-user="${esc(u.name)}"`, 'u/' + u.name) : '') +
       (store.state.canBlock
         ? `<button class="m3-icon-btn chat-report" data-act="person-menu" data-user="${esc(u.name)}" aria-label="More for u/${esc(u.name)}" data-tooltip="More">${icon('more_vert')}</button></div>`
@@ -2186,6 +2195,7 @@
         '<div class="page single"><div class="col">' +
         `<div class="page-head"><m3-shape-icon shape="pixelCircle" symbol="shield_person" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Moderation</h1><span class="muted">Open reports, newest first. Whoever you act on is told what and why.</span></div></div>` +
         '<div id="reports"><m3-loading aria-label="Loading reports"></m3-loading></div>' +
+        Nook.hooksHTML('adminSections') +
         `<form class="card add-friend" id="ban-form"><span class="field-label">Ban an account</span><div class="toolbar"><input class="m3-field" id="ban-name" placeholder="username" autocapitalize="none" spellcheck="false" maxlength="20"><input class="m3-field" id="ban-reason" placeholder="Reason they’ll see" maxlength="200"><button class="m3-btn tonal" type="submit">${icon('block')}Ban</button></div><span class="error" id="ban-err"></span></form>` +
         '</div></div>',
       mount(root) {
@@ -2255,6 +2265,7 @@
             err.textContent = error.message;
           }
         });
+        Nook.runHooks('adminMount', root);
       },
     };
   }

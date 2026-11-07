@@ -244,10 +244,38 @@
     if (target) scrollTo(0, target.y);
     else if (!route.params.c && route.params.focus !== 'comments') scrollTo(0, 0);
     if (route.view === 'searchPage') searchInput.value = route.params.q || '';
+    // a new page (or one come back to) starts with the bars showing: the jump to its place isn't reading on
+    lastY = scrollY;
+    document.body.classList.remove('bars-hidden');
     onScroll();
     armPull(!!main.querySelector('[data-feed]'));
+    Nook.runHooks('afterRender', route, main);
   }
   app.render = render;
+
+  // A post's header wraps on a narrow screen. A dot separates two things on one line, so one that would start a
+  // line is hidden, and what follows it moves over into its place (moved, not resized, so the line can't change
+  // its mind and jump back up).
+  const tidyHead = (head) => {
+    for (const el of head.querySelectorAll(':scope > :is(.by, .when)')) {
+      const prev = el.previousElementSibling;
+      const starts = !!prev && el.offsetTop >= prev.offsetTop + prev.offsetHeight - 2;
+      const dot = el.querySelector('.dot');
+      el.classList.toggle('line-start', starts);
+      el.style.translate = starts && dot ? `-${dot.offsetWidth + parseFloat(getComputedStyle(el).columnGap || 0)}px 0` : '';
+    }
+  };
+  const heads = new WeakSet();
+  const headSizes = 'ResizeObserver' in window ? new ResizeObserver((entries) => entries.forEach((e) => tidyHead(e.target))) : null;
+  let headsSoon = 0;
+  if (headSizes)
+    new MutationObserver(() => {
+      if (headsSoon) return;
+      headsSoon = requestAnimationFrame(() => {
+        headsSoon = 0;
+        for (const head of main.querySelectorAll('.post-head')) if (!heads.has(head)) heads.add(head), headSizes.observe(head);
+      });
+    }).observe(main, { childList: true, subtree: true });
 
   // ---- the shell -------------------------------------------------------------------
 
@@ -663,7 +691,9 @@
       closePicker();
     });
     const away = (e) => {
-      if (!el.contains(e.target) && !btn.contains(e.target)) closePicker();
+      if (el.contains(e.target) || btn.contains(e.target)) return;
+      closePicker();
+      if (e.pointerType !== 'mouse') ui.eatClick();
     };
     const onScroll = () => closePicker();
     document.addEventListener('pointerdown', away, true);
@@ -1408,8 +1438,11 @@
     const mod = store.isAdmin() && views.serverAt('1.0.0');
     // in a chat with them (1.0): the chat's colour
     const inChat = route && route.view === 'thread' && views.serverAt('1.0.0') && store.friendStatus(name) === 'friends';
+    // what the parts added in 1.4 put here (a nudge, say)
+    const more = Nook.hookItems ? Nook.hookItems('personMenu', name, u) : [];
     menu(btn, [
       ...(inChat ? [{ label: 'Chat colour', symbol: 'palette', onSelect: () => chatColour(name) }, { separator: true }] : []),
+      ...(more.length ? [...more, { separator: true }] : []),
       { label: `Report u/${name}`, symbol: 'flag', onSelect: () => report('user', { name }) },
       store.isBlocked(name)
         ? { label: `Unblock u/${name}`, symbol: 'lock_open', onSelect: () => unblockPerson(name) }
@@ -2110,6 +2143,7 @@
     const model = {
       color: me.color, shape: me.shape, icon: me.icon || '', photo: me.photo || '', photoGif: me.photoGif || '', banner: me.banner || '', bannerGif: me.bannerGif || '',
       font: me.font || '', flags: [...(me.flags || [])], interests: [...(me.interests || [])], scheme: me.scheme || 'tonalSpot', sticker: me.sticker || '',
+      effect: me.effect || '',
     };
     const face = (name) => ui.avatarFace({ name: name || me.name, shape: model.shape, icon: model.icon, photo: model.photo, photoGif: model.photoGif }, { moving: true });
     const bannerPreview = () => ui.bannerImage(model) || `<span class="ep-banner-empty">${icon('panorama')}No banner yet</span>`;
@@ -2190,7 +2224,11 @@
         (fonts
           ? '<div class="field"><span class="field-label">Name font</span><div class="font-grid" role="group" aria-label="Name font">' +
             ui.NAME_FONTS.map(([id, label]) => `<button type="button" data-font="${id}" aria-pressed="${id === model.font}"><span class="font-sample${id ? ' name-font-' + id : ''}" translate="no">${esc(me.name)}</span><small>${label}</small></button>`).join('') +
-            '</div><small class="muted">Your name shows in it on your profile, posts, comments and chats.</small></div>'
+            // and the fonts achievements unlock (1.4), with Customise for the rest of what they unlock
+            (Nook.rewards ? Nook.rewards.fontTiles(me.name, model.font) : '') +
+            '</div><small class="muted">Your name shows in it on your profile, posts, comments and chats.</small>' +
+            (Nook.rewards ? Nook.rewards.editorCard() : '') +
+            '</div>'
           : '') +
         `<div class="field"><label for="ep-bio">Bio</label><textarea class="m3-field" id="ep-bio" rows="4" maxlength="${BIO_MAX}" placeholder="Tell people what you’re into">${esc(me.bio || '')}</textarea>` +
         `<div class="field-foot"><small class="muted">${media ? 'Line breaks, **bold**, *italics* and links work' : ''}</small><small class="muted" id="ep-bio-count"></small></div></div>` +
@@ -2246,14 +2284,23 @@
         });
         const fontGrid = body.querySelector('.font-grid');
         if (fontGrid) {
-          fontGrid.querySelectorAll('[data-font]').forEach((b) =>
-            b.addEventListener('click', () => {
-              model.font = b.dataset.font;
-              fontGrid.querySelectorAll('[data-font]').forEach((other) => other.setAttribute('aria-pressed', String(other === b)));
-              $$('#ep-name').className = ui.nameFont(model).trim();
-              fx.pop($$('#ep-name'), 0.4);
-            })
-          );
+          // one listener for the grid, as the fonts achievements unlock arrive in it a moment later
+          fontGrid.addEventListener('click', (e) => {
+            const b = e.target.closest('[data-font]');
+            if (!b) return;
+            model.font = b.dataset.font;
+            fontGrid.querySelectorAll('[data-font]').forEach((other) => other.setAttribute('aria-pressed', String(other === b)));
+            $$('#ep-name').className = ui.nameFont(model).trim();
+            fx.pop($$('#ep-name'), 0.4);
+          });
+          // what you put on in Customise (opened from here) shows here too, and Save keeps it
+          const onStyle = (e) => {
+            if (!body.isConnected) return document.removeEventListener('nook:style', onStyle);
+            Object.assign(model, { font: e.detail.font || '', effect: e.detail.effect || '' });
+            fontGrid.querySelectorAll('[data-font]').forEach((other) => other.setAttribute('aria-pressed', String(other.dataset.font === model.font)));
+            $$('#ep-name').className = ui.nameFont(model).trim();
+          };
+          document.addEventListener('nook:style', onStyle);
         }
         // pronouns, a flag, colours, shapes and interests (from 0.7.0)
         let paintDots = () => {};
@@ -2719,7 +2766,8 @@
       $('#f-write', root).hidden = preview;
       const box = $('#f-preview', root);
       box.hidden = !preview;
-      box.innerHTML = body.value.trim() ? ui.md(body.value) : '<p class="muted">Nothing to preview yet.</p>';
+      // your own emojis (1.4) show as they will once it's posted
+      box.innerHTML = body.value.trim() ? ui.md(Nook.stickers ? Nook.stickers.toTokens(body.value) : body.value) : '<p class="muted">Nothing to preview yet.</p>';
     });
 
     // the image: chosen or dropped, then shrunk to fit in local storage
@@ -3039,7 +3087,8 @@
 
   // ---- live: what the server says changed ------------------------------------------------------------
 
-  const said = (m, inGroup) => (m.kind ? views.lineText(m, inGroup) : ui.plain(S().filterLanguage === false ? m.body : Nook.mod.soften(m.body), 70));
+  const said = (m, inGroup) =>
+    m.kind ? views.lineText(m, inGroup) : !m.body && m.media && m.media.type === 'sticker' ? 'Sent a sticker' : ui.plain(S().filterLanguage === false ? m.body : Nook.mod.soften(m.body), 70);
   store.on('messages', (incoming = []) => {
     renderBadges();
     // a group's chat only listens for its own news
@@ -3316,6 +3365,16 @@
       if (shape) shape.transitionTo('cookie9', { spring: true });
     }
   }
+  // the system can take the touch over halfway (a back swipe, a call coming in): the pull just ends
+  addEventListener(
+    'touchcancel',
+    () => {
+      if (!pull) return;
+      pull = null;
+      resetPull();
+    },
+    { passive: true }
+  );
   addEventListener('touchend', () => {
     if (!pull) return;
     const armed = pull.active && pull.armed;
@@ -3349,6 +3408,28 @@
     vv.addEventListener('resize', fitKeyboard);
     vv.addEventListener('scroll', fitKeyboard);
   }
+  // In Budgie's Android app the keyboard makes the window shorter. Put away (with Back, or the keyboard's own key)
+  // while a box still has the focus, the typing is over: the box lets go, so the bottom bar and the chat box come
+  // back down. (In a phone's browser the keyboard leaves the window as it is, so this never happens there.)
+  let tall = innerHeight;
+  let wide = innerWidth;
+  let keyboardWasUp = false;
+  addEventListener('resize', () => {
+    if (innerWidth !== wide) {
+      wide = innerWidth;
+      tall = innerHeight;
+      keyboardWasUp = false;
+      return;
+    }
+    if (!typing()) {
+      tall = Math.max(tall, innerHeight);
+      keyboardWasUp = false;
+    } else if (innerHeight < tall - 150) keyboardWasUp = true;
+    else if (keyboardWasUp && innerHeight >= tall - 40 && matchMedia('(hover: none)').matches) {
+      keyboardWasUp = false;
+      document.activeElement.blur();
+    }
+  });
   document.addEventListener('focusin', () => document.body.classList.toggle('typing', typing()));
   document.addEventListener('focusout', () => setTimeout(() => document.body.classList.toggle('typing', typing()), 0));
 

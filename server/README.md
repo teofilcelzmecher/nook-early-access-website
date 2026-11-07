@@ -269,6 +269,22 @@ by itself.
 In an emergency (say the laptop is running out of memory), `NOOK_TEXT_CHECK=off` or
 `NOOK_PICTURE_CHECK=off` in the service's settings turns one off.
 
+## Achievements and the streak (1.4)
+
+The server counts achievements itself (posts, comments, friends, songs and games from the Activity part, screen
+sharing in calls…), in five tiers, I to V, from the list in `js/achievements-data.js`, and keeps everyone's visit
+streak by their own date, with freezes that save it on a missed day. Nothing to set up. Special achievements are
+the ones you give "for whatever reason you want": make them on the Moderation page, or here:
+
+| Command | What it does |
+|---|---|
+| `sudo nook achievement new "Bug hunter" "Found a real bug in Budgie" bug_report boom` | Makes a special achievement (a [Material Symbols](https://fonts.google.com/icons) name and one of the app's shapes are optional) |
+| `sudo nook achievements` | Lists the special achievements, their ids and how many people have each |
+| `sudo nook award NAME ID [TIER]` | Gives someone one (tier 1–5 or I–V, or none); they're told in their inbox |
+| `sudo nook unaward NAME ID` | Takes it away again |
+
+On someone's profile, the medal button (admins only) gives one too.
+
 ## Backups
 
 Every night at 03:30 the database is copied to `/var/lib/nook/backups/` and copies older than 14 days
@@ -281,6 +297,31 @@ sudo cp /var/lib/nook/backups/nook-$(date +%F).db /run/media/$USER/YOUR_USB/
 
 To restore: `sudo systemctl stop nook`, copy the backup over `/var/lib/nook/nook.db`
 (and delete `nook.db-wal` and `nook.db-shm` next to it), then `sudo systemctl start nook`.
+
+## Network bans (1.4)
+
+Someone banned who comes straight back with a new account can be stopped by their internet connection too. The
+server notes which networks (IP addresses) each account uses Budgie from, as a keyed hash only (HMAC-SHA256 with a
+secret made on this laptop and kept in its own file, DATA/ip-key, readable only by Budgie, never in the database or
+its backups, and never the address itself), once an hour at most, and forgets
+them after 90 days. For IPv6 it's the address's /64 block, since phones and homes move around inside it by themselves.
+
+"Ban account and network" (on someone's profile, or the Moderation page) bans the account and every network it used in
+the last 90 days, for a day, a week, a month or for good. While it lasts, nobody can use Budgie from those networks
+(signing up and signing in included); when it ends or you lift it, the account can come back too. Phone networks,
+schools and cafés give lots of people the same address, so the app says how many other accounts used those networks
+lately before you ban. You can't be locked out: admins can't be banned, a network any admin used in the last 90 days
+is never banned, and an admin who's signed in gets through a network ban anyway (so a VPN you share with others is fine).
+
+| Command | What it does |
+|---|---|
+| `sudo nook ipban NAME [DAYS] [reason…]` | Bans an account and the networks it used (DAYS: 1, 7, 30, or 0 for good; 7 if left out) |
+| `sudo nook ipban 203.0.113.5 [DAYS] [reason…]` | Bans one address's network by itself (only its hash is kept) |
+| `sudo nook ipbans` | Lists the network bans in force, with their ids |
+| `sudo nook ipunban ID` / `ipunban NAME` | Lifts one (and the account ban that came with it) |
+
+It only works when whatever brings Budgie to the internet says who's calling (Tailscale Funnel does, in
+`X-Forwarded-For`); without that, every request looks the same and nothing is noted or banned.
 
 ## Good to know
 

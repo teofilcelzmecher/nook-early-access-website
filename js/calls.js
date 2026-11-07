@@ -72,6 +72,8 @@
     osc.stop(t + length + 0.05);
   }
   // the ringtones to pick from in Settings → Calls; "silent" only vibrates
+  // what the ringtones are called (Budgie's own words, so they can be translated)
+  const RINGTONE_NAMES = { budgie: 'Budgie', chime: 'Chime', pulse: 'Pulse', classic: 'Classic', silent: 'Silent' };
   const RINGTONES = {
     // a bright three-note figure, twice, like a little bird
     budgie() {
@@ -416,6 +418,8 @@
         if (active && active.id === d.call) inbox = inbox.then(() => signalled(d.from, d.type, d.data)).catch(() => {});
         return;
       default:
+        // anything else is for the parts added in 1.4 (a nudge)
+        if (Nook.runHooks) Nook.runHooks('signal', item.type, d);
     }
   }
 
@@ -1222,6 +1226,10 @@
     if (sound && 'contentHint' in sound) sound.contentHint = 'music';
     active.screen = track;
     active.screenSound = sound;
+    // the time it's shared counts towards an achievement (1.4)
+    active.shareFrom = Date.now();
+    clearInterval(active.shareTick);
+    active.shareTick = setInterval(() => reportShare(), 5 * 60000);
     // nobody's watching yet: everyone sees the card, and joins it if they want to (an older app shows it straight away)
     active.peers.forEach((peer) => {
       if (peer.watchesMe) peer.watchesMe = false;
@@ -1233,6 +1241,20 @@
     controls();
     layout();
   }
+  /**
+   * how long your screen has been shared since this was last said, told to the server (1.4: the Broadcaster
+   * achievement): when a share stops, when the call ends, and every 5 minutes in between. The server never counts
+   * more than the time you were really in the call.
+   */
+  function reportShare(call = active, keepalive = false) {
+    if (!call || !call.shareFrom) return;
+    const at = Date.now();
+    const seconds = Math.round((at - call.shareFrom) / 1000);
+    call.shareFrom = call.screen ? at : 0;
+    if (seconds > 0) api.post('/api/stats/share', { callId: call.id, seconds }, { keepalive }).catch(() => {});
+  }
+  addEventListener('pagehide', () => active && reportShare(active, true));
+
   // up to 1080p at 30 frames a second: a bigger screen is scaled down, which costs little sharpness and keeps it smooth
   const SCREEN = { frameRate: { ideal: 30, max: 30 }, width: { max: 1920 }, height: { max: 1080 } };
 
@@ -1250,6 +1272,8 @@
     const sound = active.screenSound;
     active.screen = null;
     active.screenSound = null;
+    reportShare();
+    clearInterval(active.shareTick);
     track.stop();
     if (sound) sound.stop();
     active.peers.forEach((peer) => {
@@ -1318,6 +1342,8 @@
     unloop();
     clearInterval(was.tick);
     clearInterval(was.usage);
+    clearInterval(was.shareTick);
+    reportShare(was, true);
     meters.stop();
     was.peers.forEach(closePeer);
     stopTracks(was.local);
@@ -1485,7 +1511,7 @@
         `<div class="swatches">${ui.SEEDS.map((seed, i) => `<button type="button" class="swatch" data-color="${seed}" aria-pressed="${seed === pick}" aria-label="Colour ${seed}"><m3-shape shape="${ui.SEED_SHAPES[i]}" style="color:${seed}"></m3-shape></button>`).join('')}</div></div>` +
         `<div class="field"><span class="field-label">Background</span><div class="chips">${BACKGROUNDS.map(([id, label, symbol]) => choice('bg', id, label, symbol, (s.callBg || 'shapes') === id)).join('')}</div></div>` +
         `<div class="field"><span class="field-label">Ringtone</span><div class="chips" style="flex-wrap:wrap">${Object.keys(RINGTONES)
-          .map((id) => choice('tone', id, id[0].toUpperCase() + id.slice(1), id === 'silent' ? 'vibration' : 'music_note', ringtone() === id))
+          .map((id) => choice('tone', id, RINGTONE_NAMES[id] || id[0].toUpperCase() + id.slice(1), id === 'silent' ? 'vibration' : 'music_note', ringtone() === id))
           .join('')}</div></div>`,
       setup(body) {
         body.addEventListener('click', (e) => {
@@ -1510,7 +1536,7 @@
     el.className = 'call-screen';
     el.dataset.media = active.call.media;
     el.setAttribute('role', 'dialog');
-    el.setAttribute('aria-label', `${kindOf(active.call.media)} with ${title()}`);
+    el.setAttribute('aria-label', active.call.media === 'video' ? `Video call with ${title()}` : `Voice call with ${title()}`);
     const keys = matchMedia('(hover: hover)').matches;
     el.innerHTML =
       `<div class="call-bg" aria-hidden="true">${['cookie12', 'flower', 'clover8', 'sunny'].map((shape) => `<m3-shape shape="${shape}"></m3-shape>`).join('')}</div>` +
