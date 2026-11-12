@@ -677,10 +677,15 @@ img.cemoji {
     background-color 120ms,
     border-radius var(--m3-motion-click-bounce, 300ms);
 }
-.ep-make:hover,
 .ep-make:focus-within {
   border-radius: 50%;
   background: var(--m3-layer1-hover);
+}
+@media (hover: hover) {
+  .ep-make:hover {
+    border-radius: 50%;
+    background: var(--m3-layer1-hover);
+  }
 }
 
 /* ---- :name: as you type --------------------------------------------------------------------------------------- */
@@ -809,4 +814,28 @@ body.calm .stk-stage.working {
 }
 html[data-m3-reduce-motion] :is(.stk-tile, .stk-tile img, .sticker-media .sticker-img, .stk-peek img, img.cemoji) {
   transition: none;
+}
+
+/* ---- Browse (1.5): what people shared, searched and sorted ---------------------------------------------------- */
+
+.stk-browse-bar {
+  display: grid;
+  gap: 8px;
+}
+.stk-browse-bar[hidden] {
+  display: none;
+}
+.stk-browse-bar input {
+  width: 100%;
+}
+.stk-browse-bar .chips {
+  display: flex;
+  gap: 6px;
+}
+.stk-grid[data-kind='browse'] .stk-tile {
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.stk-foot m3-loading {
+  display: block;
+  margin: 6px auto;
 }

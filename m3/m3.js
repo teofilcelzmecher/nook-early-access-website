@@ -1641,7 +1641,8 @@
       backing.angle = baseAngle() + drift.value;
       drift.active = hovered && !isDisabled(button) && !button.hasAttribute('data-shape-still');
     };
-    button.addEventListener('pointerenter', () => {
+    button.addEventListener('pointerenter', (e) => {
+      if (e.pointerType === 'touch') return;
       hovered = true;
       update();
     });
@@ -1678,7 +1679,8 @@
       const shown = onToggled || (hovered && !isDisabled(button) && !!(toggledShape || hoverShape));
       shape.classList.toggle('is-shown', shown);
     };
-    button.addEventListener('pointerenter', () => {
+    button.addEventListener('pointerenter', (e) => {
+      if (e.pointerType === 'touch') return;
       hovered = true;
       update();
     });
@@ -2216,7 +2218,7 @@
       if (!segment.hasAttribute('aria-checked')) segment.setAttribute('aria-checked', 'false');
       const symbol = segment.getAttribute('data-symbol');
       if (symbol && !segment.querySelector(':scope > .m3-icon')) segment.insertBefore(glyph(symbol), segment.firstChild);
-      segment.addEventListener('pointerenter', () => hover(segment, true));
+      segment.addEventListener('pointerenter', (e) => e.pointerType !== 'touch' && hover(segment, true));
       segment.addEventListener('pointerleave', () => hover(segment, false));
       if (resize) resize.observe(segment);
     }
@@ -2396,7 +2398,9 @@
     };
 
     sync();
-    place();
+    // where a ResizeObserver watches, its first look places the pill, after the page is laid out and before it's
+    // shown: measuring now, in the middle of the page being drawn, would lay the whole page out an extra time
+    if (!resize) place();
   });
 
   // ---- search field (SearchField.qml) --------------------------------------
@@ -3155,7 +3159,8 @@
       this._lean = new motion.Spring(0, motion.springs.bounce, (value) => {
         this._icon.style.rotate = fmt(value) + 'deg';
       });
-      this._enter = () => {
+      this._enter = (e) => {
+        if (e && e.pointerType === 'touch') return;
         this._pointerIn = true;
         this._sync();
       };
@@ -3172,7 +3177,8 @@
       this._hoverRoot = this.closest('[data-m3-hover-root]') || this;
       this._hoverRoot.addEventListener('pointerenter', this._enter);
       this._hoverRoot.addEventListener('pointerleave', this._leave);
-      this._pointerIn = this._hoverRoot.matches(':hover');
+      // (a touch screen's :hover sticks to whatever was last tapped: there, nothing starts out hovered)
+      this._pointerIn = this._hoverRoot.matches(':hover') && matchMedia('(hover: hover)').matches;
       this._sync();
       // what it is given in the task that adds it shows as it is
       if (!this._settled) util.raf(() => (this._settled = true));
@@ -3245,6 +3251,11 @@
     'm3-shape{position:absolute;left:7%;top:7%;width:86%;height:86%;color:var(--m3-loading-color,var(--m3-primary))}' +
     ':host([contained]) m3-shape{left:19%;top:19%;width:62%;height:62%;' +
     'color:var(--m3-loading-color,var(--m3-on-primary-container))}' +
+    // the slow turn is the browser's own animation, which goes on even while the page is busy (loading what the
+    // indicator is there for); the kicks and the morphs are drawn on top of it, frame by frame
+    `m3-shape:not(.pulsing){animation:m3-loading-turn ${LOADING_TURN}ms linear infinite;will-change:transform}` +
+    '.paused{animation-play-state:paused}' +
+    '@keyframes m3-loading-turn{to{transform:rotate(360deg)}}' +
     `.pulsing{animation:m3-loading-pulse 700ms ${motion.cssEasing('inOutSine')} infinite alternate}` +
     '.pulsing.paused{animation-play-state:paused}' +
     '@keyframes m3-loading-pulse{from{opacity:1}to{opacity:.35}}';
@@ -3360,7 +3371,6 @@
       }
       const dt = clamp(time - this._last, 0, 100);
       this._last = time;
-      this._turn = (this._turn + (dt * 360) / LOADING_TURN) % 360;
       this._elapsed += dt;
       if (this._elapsed >= LOADING_STEP) {
         this._elapsed %= LOADING_STEP;
@@ -3369,7 +3379,8 @@
         this._kickOn();
       }
       this._body.morph = loadingMorph(this._elapsed / LOADING_STEP);
-      this._body.angle = (this._turn + this._kick.value) % 360;
+      // (the slow turn is the css animation round it: only the kick is added here)
+      this._body.angle = this._kick.value % 360;
       this._frame = util.raf(this._tick);
     }
   }
@@ -3661,7 +3672,8 @@
       this._thickness = new motion.Tweened(4, motion.presets.elementMoveFast, draw);
       this._handleWidth = new motion.Tweened(0, motion.presets.elementMoveFast, draw);
 
-      this.addEventListener('pointerenter', () => {
+      this.addEventListener('pointerenter', (e) => {
+        if (e.pointerType === 'touch') return;
         this._hover = true;
         this._sync();
       });
@@ -4113,7 +4125,8 @@
       update();
     };
 
-    button.addEventListener('pointerenter', () => {
+    button.addEventListener('pointerenter', (e) => {
+      if (e.pointerType === 'touch') return;
       hovered = true;
       update();
     });
@@ -4310,7 +4323,9 @@
   function retoneStickers() {
     if (retoning) return;
     retoning = true;
-    Promise.resolve().then(() => {
+    // read on the next frame, once whatever changed the colours is all in: reading at once would make the browser
+    // work the page's styles out in the middle of it changing
+    util.raf(() => {
       retoning = false;
       doc.querySelectorAll('.m3-stickers').forEach((layer) => {
         const retone = retoners.get(layer);
@@ -4336,10 +4351,13 @@
       'position:absolute;inset:0;pointer-events:none;z-index:-1' +
       // cut to its own bounds as the rounded card it sits in looks, if asked
       (clipRadius >= 0 ? `;overflow:hidden;border-radius:${fmt(clipRadius)}px` : '');
-    // behind the container's content but over its background
-    const look = getComputedStyle(container);
-    if (look.position === 'static') container.style.position = 'relative';
-    if (look.isolation === 'auto') container.style.isolation = 'isolate';
+    // behind the container's content but over its background (checked on the next frame: asking for its style
+    // now would make the browser work out the whole page's styles while it's being drawn)
+    util.raf(() => {
+      const look = getComputedStyle(container);
+      if (look.position === 'static') container.style.position = 'relative';
+      if (look.isolation === 'auto') container.style.isolation = 'isolate';
+    });
 
     const only = (Array.isArray(o.shapes) ? o.shapes : String(o.shapes || '').split(/[\s,]+/)).filter((name) => global.M3Shapes && global.M3Shapes.names.includes(name));
     const specs = stickerLayout(String(o.key), count, min, max, only);
@@ -4355,13 +4373,17 @@
     });
     container.insertBefore(layer, container.firstChild);
 
-    const retone = () => {
-      const alpha = clamp((darkAt(layer) ? 0.32 : 0.5) * strength, 0, 1);
+    const paint = (dark) => {
+      const alpha = clamp((dark ? 0.32 : 0.5) * strength, 0, 1);
       shapes.forEach((el, index) => {
         el.style.color = `color-mix(in srgb, var(${STICKER_TONES[specs[index].tone]}) ${fmt(alpha * 100)}%, transparent)`;
       });
     };
-    retone();
+    const retone = () => paint(darkAt(layer));
+    // at once as the page's own setting has it, then exactly (where the layer sits) on the next frame
+    const themed = doc.documentElement.getAttribute('data-m3-theme');
+    paint(themed ? themed === 'dark' : !!(global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches));
+    util.raf(() => layer.isConnected && retone());
     retoners.set(layer, retone);
 
     // they turn with the music while in view, and not at all under reduced motion
