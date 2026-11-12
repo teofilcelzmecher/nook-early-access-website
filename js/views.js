@@ -153,15 +153,21 @@
     const comments = store.commentCount(p.id);
     const when = new Date(p.createdAt);
 
+    // two lines beside a picture: where it was posted (or, inside a nest, who posted it), then who and when
+    const who = `<a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a>${prideFlag(u)}${devTag(u)}${Nook.hooksHTML('nameTags', u)}${roleTag(p.n, name)}`;
+    const time = `<time datetime="${when.toISOString()}" title="${esc(when.toLocaleString())}">${ago(p.createdAt)}</time>`;
+    const marks =
+      (p.pinned && (inNook || open) ? `<span class="tag pin">${icon('push_pin')}Pinned</span>` : '') +
+      (p.spoiler ? `<span class="tag">${icon('visibility_off')}Spoiler</span>` : '');
     const head =
       '<header class="post-head">' +
       (inNook
-        ? `${avatar(u, 24)}<a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a>${prideFlag(u)}${devTag(u)}${Nook.hooksHTML('nameTags', u)}${roleTag(p.n, name)}`
-        : `<a class="nook-link" href="#/n/${c.id}">${nookIcon(c, 26, 15)}n/${esc(c.id)}</a><span class="by"><span class="dot"></span><a class="author${nameFont(u)}" href="#/u/${esc(name)}">u/${esc(name)}</a></span>${prideFlag(u)}${devTag(u)}${Nook.hooksHTML('nameTags', u)}${roleTag(p.n, name)}`) +
-      // the dot travels with what follows it, so a line that wraps never ends in a lone "·"
-      `<span class="when"><span class="dot"></span><time datetime="${when.toISOString()}" title="${esc(when.toLocaleString())}">${ago(p.createdAt)}</time></span>` +
-      (p.pinned && (inNook || open) ? `<span class="tag pin">${icon('push_pin')}Pinned</span>` : '') +
-      (p.spoiler ? `<span class="tag">${icon('visibility_off')}Spoiler</span>` : '') +
+        ? `<a class="ph-icon" href="#/u/${esc(name)}" tabindex="-1" aria-hidden="true">${avatar(u, 40)}</a>` +
+          `<div class="ph-text"><div class="ph-top">${who}</div><div class="ph-sub"><span class="when">${time}</span>${marks}</div></div>`
+        : `<a class="ph-icon" href="#/n/${c.id}" tabindex="-1" aria-hidden="true">${nookIcon(c, 40, 22)}</a>` +
+          `<div class="ph-text"><div class="ph-top"><a class="nook-link" href="#/n/${c.id}">n/${esc(c.id)}</a></div>` +
+          // the dot travels with what follows it, so a line that wraps never ends in a lone "·"
+          `<div class="ph-sub"><span class="by">${who}</span><span class="when"><span class="dot"></span>${time}</span>${marks}</div></div>`) +
       `<button class="m3-icon-btn small post-more" data-act="post-menu" aria-label="More options"><span translate="no" class="m3-icon">more_horiz</span></button>` +
       '</header>';
 
@@ -192,7 +198,7 @@
       `<button class="m3-btn tonal act" data-act="spark-picker" aria-label="Add a Spark" data-tooltip="Spark it">${icon('add_reaction')}<span class="label-wide">Spark</span></button>` +
       `<button class="m3-btn tonal act" data-act="share" aria-label="Share">${icon('ios_share')}<span class="label-wide">Share</span></button>` +
       '<span class="spacer"></span>' +
-      `<button class="m3-icon-btn" data-act="save" data-burst="pin" aria-pressed="${saved}" aria-label="Save" data-tooltip="${saved ? 'Saved' : 'Save'}"><span translate="no" class="m3-icon">bookmark</span></button>` +
+      `<button class="m3-icon-btn" data-act="save" data-burst="pin" data-toggled-shape="cookie4" aria-pressed="${saved}" aria-label="Save" data-tooltip="${saved ? 'Saved' : 'Save'}"><span translate="no" class="m3-icon">bookmark</span></button>` +
       '</footer>';
 
     const tint = !inNook ? ` data-tint="${c.color}"` : '';
@@ -543,6 +549,8 @@
         `<m3-shape-icon class="nook-avatar" shape="${c.shape}" hover-shape="${c.shape === 'heart' ? 'flower' : 'heart'}" symbol="${c.symbol}" size="104" icon-size="48"></m3-shape-icon>` +
         `<div class="nook-id"><h1 class="m3-title" translate="no">${esc(c.title)}</h1><span class="muted">n/${esc(c.id)}<span class="count"> · ${plural(store.activity(c).posts, 'post')}</span></span></div>` +
         `<div class="nook-hero-actions">${joinButton(c, false)}` +
+        // (on a phone Post sits here beside Join, so the row of sort tabs stays one row)
+        (store.bannedFrom(c.id) ? '' : `<a class="m3-btn filled only-phone" href="#/submit?n=${c.id}">${icon('edit')}Post</a>`) +
         (store.nestPerms(c).length && serverAt('0.9.5') ? `<a class="m3-icon-btn tonal" href="#/n/${esc(c.id)}/manage" aria-label="Manage n/${esc(c.id)}" data-tooltip="Manage">${icon('tune')}</a>` : '') +
         `<button class="m3-icon-btn tonal" data-act="nook-menu" data-nook="${c.id}" aria-label="More" data-tooltip="More"><span translate="no" class="m3-icon">more_horiz</span></button></div></div>` +
         `<p class="nook-tagline"${ownText(c)}>${esc(c.tagline)}</p>` +
@@ -552,7 +560,7 @@
         `<div class="toolbar">${sortControl('hot')}<span class="spacer"></span>` +
         `<button class="m3-btn tonal small only-tablet" data-act="nook-about" data-nook="${c.id}">${icon('info')}About</button>` +
         // nobody banned from the nest is offered a Post button the server will refuse
-        `${store.bannedFrom(c.id) ? '' : `<a class="m3-btn filled small" href="#/submit?n=${c.id}">${icon('edit')}Post</a>`}${compactToggle()}</div>` +
+        `${store.bannedFrom(c.id) ? '' : `<a class="m3-btn filled small not-phone" href="#/submit?n=${c.id}">${icon('edit')}Post</a>`}${compactToggle()}</div>` +
         (flairs.length
           ? `<div class="chips" role="group" aria-label="Filter by flair"><button class="chip" data-m3-ripple data-flair="" aria-pressed="true">All</button>${flairs.map((f) => `<button class="chip" data-m3-ripple data-flair="${esc(f)}" aria-pressed="false"${ownFlair(c, f)}>${esc(f)}</button>`).join('')}</div>`
           : '') +
@@ -693,10 +701,10 @@
     const list = s.saved.map((id) => store.post(id)).filter((p) => p && !store.isRemoved(p.id));
     return {
       title: 'Saved',
-      brand: 'clover4',
+      brand: 'arch',
       html:
         '<div class="page single"><div class="col">' +
-        `<div class="page-head"><m3-shape-icon shape="clover4" symbol="bookmarks" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Saved</h1><span class="muted">${plural(list.length, 'post')} saved, ${plural(s.collections.length, 'collection')}</span></div></div>` +
+        `<div class="page-head"><m3-shape-icon shape="arch" symbol="bookmarks" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Saved</h1><span class="muted">${plural(list.length, 'post')} saved, ${plural(s.collections.length, 'collection')}</span></div></div>` +
         `<section class="section"><header class="m3-section-header" data-m3-hover-root><m3-shape-icon shape="gem" symbol="collections_bookmark" size="34" icon-size="18"></m3-shape-icon><h2 class="m3-title">Collections</h2><m3-wavy-line></m3-wavy-line>` +
         `<button class="m3-btn tonal small" data-act="new-collection">${icon('add')}New</button></header>` +
         '<div class="shelf">' +
@@ -859,10 +867,10 @@
     const notes = store.notifications();
     return {
       title: 'Inbox',
-      brand: 'clover4',
+      brand: 'puffy',
       html:
         '<div class="page single"><div class="col">' +
-        `<div class="page-head"><m3-shape-icon shape="clover4" symbol="notifications" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Inbox</h1><span class="muted">${plural(store.unread(), 'unread notification')}</span></div><span class="spacer"></span>` +
+        `<div class="page-head"><m3-shape-icon shape="puffy" symbol="notifications" size="48" icon-size="24"></m3-shape-icon><div><h1 class="m3-title">Inbox</h1><span class="muted">${plural(store.unread(), 'unread notification')}</span></div><span class="spacer"></span>` +
         `<button class="m3-btn tonal small" data-act="read-all">${icon('done_all')}Mark all read</button></div>` +
         (notes.length
           ? `<div class="notes">${notes

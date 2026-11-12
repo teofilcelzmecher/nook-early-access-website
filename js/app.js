@@ -227,6 +227,8 @@
 
     const navKey = NAV_FOR[route.view] || '';
     $$('[data-nav]').forEach((el) => (el.dataset.nav === navKey ? el.setAttribute('aria-current', 'page') : el.removeAttribute('aria-current')));
+    // the phone menu's tiles: where you are keeps its shape's other form
+    for (const shape of $$('.nav-shape')) shape.toggleAttribute('hovered', shape.closest('[data-nav]').dataset.nav === navKey);
 
     if (view.mount) {
       try {
@@ -257,7 +259,7 @@
   // line is hidden, and what follows it moves over into its place (moved, not resized, so the line can't change
   // its mind and jump back up).
   const tidyHead = (head) => {
-    for (const el of head.querySelectorAll(':scope > :is(.by, .when)')) {
+    for (const el of head.querySelectorAll('.ph-sub > .when')) {
       const prev = el.previousElementSibling;
       const starts = !!prev && el.offsetTop >= prev.offsetTop + prev.offsetHeight - 2;
       const dot = el.querySelector('.dot');
@@ -333,7 +335,7 @@
     const row = $('#drawer-me');
     row.href = '#/u/' + encodeURIComponent(me.name);
     row.setAttribute('aria-label', `Your profile, u/${me.name}`);
-    row.innerHTML = `${avatar(me, 44)}<span class="row-text"><b translate="no">${esc(me.name)}</b><small>View your profile</small></span>${icon('chevron_right')}`;
+    row.innerHTML = `<m3-shape class="me-deco" shape="cookie12" aria-hidden="true"></m3-shape>${avatar(me, 52)}<span class="row-text"><b translate="no">${esc(me.name)}</b><small>View your profile</small></span>${icon('chevron_right')}`;
   }
 
   let lastUnread = -1;
@@ -412,15 +414,18 @@
   });
 
   // light or dark spreads out from the button in a circle
-  $('#theme-btn').addEventListener('click', (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    fx.haptic(6);
-    fx.reveal(r.left + r.width / 2, r.top + r.height / 2, () => {
-      S().mode = ui.theme.isDark() ? 'light' : 'dark';
-      store.save();
-      return applySettings();
+  // (on a phone the button is in the drawer, so the bar stays light)
+  for (const id of ['#theme-btn', '#drawer-theme']) {
+    $(id).addEventListener('click', (e) => {
+      const r = e.currentTarget.getBoundingClientRect();
+      fx.haptic(6);
+      fx.reveal(r.left + r.width / 2, r.top + r.height / 2, () => {
+        S().mode = ui.theme.isDark() ? 'light' : 'dark';
+        store.save();
+        return applySettings();
+      });
     });
-  });
+  }
 
   // the brand takes a spin home
   $('.brand').addEventListener('click', () => {
@@ -477,7 +482,7 @@
     document.body.classList.toggle('compact', !!s.compact);
     document.body.classList.toggle('plain-names', s.nameFonts === false);
     $$('[data-act="compact"]').forEach((b) => b.setAttribute('aria-pressed', String(!!s.compact)));
-    $('#theme-btn .m3-icon').textContent = ui.theme.isDark() ? 'light_mode' : 'dark_mode';
+    for (const id of ['#theme-btn', '#drawer-theme']) $(id + ' .m3-icon').textContent = ui.theme.isDark() ? 'light_mode' : 'dark_mode';
     const wear = wearing();
     ui.favicon(brandShape.showing, (wear && wear.color) || s.seed);
     scheduleBreak();
@@ -3396,17 +3401,26 @@
 
   // ---- the on-screen keyboard -----------------------------------------------------------------------
 
-  // phones: how much of the window the keyboard covers, so what's pinned to the bottom (the chat
-  // box) can sit on top of it, and while you type the bottom bar steps aside
+  // Android (interactive-widget in the viewport tag) and Budgie's own apps make the page shorter for the keyboard,
+  // so what's stuck to the top and the bottom stays where it is by itself, and this measures nothing. Safari (and
+  // older Android browsers) lay the keyboard over the page instead, and slide the page up to show the box: there,
+  // while you type, the bars stuck to the top follow the top of what's showing (--vv-top), and what's stuck to the
+  // bottom (the message box, a sheet) sits right on the keyboard (--kb). A pinch zoom also shows less of the page,
+  // but that isn't the keyboard, so it moves nothing. While you type, the bottom bar steps aside.
   if (window.visualViewport) {
     const vv = window.visualViewport;
+    const root = document.documentElement;
     const fitKeyboard = () => {
-      const covered = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
-      document.documentElement.style.setProperty('--kb', (covered > 80 ? covered : 0) + 'px');
-      document.body.classList.toggle('keyboard', covered > 80 || (typing() && keyboardUp()));
+      const on = typing() && vv.scale < 1.05 && innerHeight - vv.height > 80;
+      const covered = on ? Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop)) : 0;
+      root.style.setProperty('--kb', covered + 'px');
+      root.style.setProperty('--vv-top', (on ? Math.max(0, Math.round(vv.offsetTop)) : 0) + 'px');
+      document.body.classList.toggle('keyboard', on);
     };
     vv.addEventListener('resize', fitKeyboard);
     vv.addEventListener('scroll', fitKeyboard);
+    document.addEventListener('focusin', fitKeyboard);
+    document.addEventListener('focusout', () => setTimeout(fitKeyboard, 0));
   }
   // In Budgie's Android app the keyboard makes the window shorter. Put away (with Back, or the keyboard's own key)
   // while a box still has the focus, the typing is over: the box lets go, so the bottom bar and the chat box come
