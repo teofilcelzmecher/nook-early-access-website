@@ -3913,8 +3913,209 @@ html[data-m3-reduce-motion] :is(.nav-ind, .nav-ind .m3-icon, .enter) {
 
 /* until someone is let in, only the gate shows, and the welcome page for someone not signed in (with its
    language menu) */
-html.gated body > :not(.gate):not(.landing):not(.m3-menu) {
+html.gated body > :not(.gate):not(.landing):not(.m3-menu):not(.boot-skeleton) {
   display: none !important;
+}
+
+/* ---- opening (1.6): a skeleton of the app, from the first frame, for someone signed in ------------------------ */
+.boot-skeleton {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--m3-background);
+  pointer-events: none;
+  transition: opacity 200ms ease-out;
+}
+html.visitor .boot-skeleton {
+  display: none;
+}
+.boot-skeleton.leaving {
+  opacity: 0;
+}
+.boot-skeleton i,
+.boot-skeleton b {
+  display: block;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--m3-on-surface) 9%, transparent);
+}
+.sk-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px;
+}
+.sk-top .sk-circle {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+.sk-top .sk-brand {
+  width: 112px;
+  height: 26px;
+  border-radius: 13px;
+}
+.sk-top .sk-grow {
+  flex: 1;
+}
+.sk-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  padding: 4px 12px;
+  overflow: hidden;
+}
+.sk-nav,
+.sk-rail {
+  display: none;
+}
+.sk-feed {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.sk-chips {
+  display: flex;
+  gap: 8px;
+}
+.sk-chips i {
+  width: 64px;
+  height: 32px;
+  border-radius: 16px;
+}
+.sk-chips i:first-child {
+  width: 84px;
+}
+.sk-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: var(--m3-r-large);
+  background: var(--m3-surface-container-low);
+  animation: sk-pulse 1.5s ease-in-out infinite;
+}
+.sk-card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.sk-card:nth-child(4) {
+  animation-delay: 0.3s;
+}
+@keyframes sk-pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+.sk-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sk-head .sk-av {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+}
+.sk-head span {
+  display: grid;
+  gap: 6px;
+}
+.sk-head span i {
+  width: 110px;
+  height: 10px;
+}
+.sk-head span i + i {
+  width: 60px;
+}
+.sk-card .sk-title {
+  width: 82%;
+  height: 18px;
+}
+.sk-card .sk-line {
+  width: 96%;
+  height: 11px;
+}
+.sk-card .sk-short {
+  width: 62%;
+}
+.sk-card .sk-media {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--m3-r-normal);
+}
+.sk-actions {
+  display: flex;
+  gap: 8px;
+}
+.sk-actions i {
+  width: 76px;
+  height: 32px;
+  border-radius: 16px;
+}
+.sk-bottom {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 12px 8px calc(env(safe-area-inset-bottom, 0px) + 14px);
+  background: var(--m3-surface-container);
+}
+.sk-bottom i {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+.sk-bottom .sk-create {
+  width: 56px;
+  height: 36px;
+  border-radius: 18px;
+}
+/* a computer: the side menu, the feed in the middle and the column on the right, as the app lays them out */
+@media (min-width: 720px) {
+  .sk-top .sk-wide {
+    width: 120px;
+    border-radius: 20px;
+  }
+  .sk-body {
+    grid-template-columns: 240px minmax(0, 640px);
+    justify-content: center;
+    gap: 24px;
+    padding: 12px 24px;
+  }
+  .sk-nav {
+    display: grid;
+    align-content: start;
+    gap: 14px;
+    padding-top: 6px;
+  }
+  .sk-nav i {
+    width: 70%;
+    height: 22px;
+    border-radius: 11px;
+  }
+  .sk-nav b {
+    width: 40%;
+    height: 12px;
+    margin-top: 10px;
+  }
+  .sk-bottom {
+    display: none;
+  }
+}
+@media (min-width: 1100px) {
+  .sk-body {
+    grid-template-columns: 240px minmax(0, 640px) 300px;
+  }
+  .sk-rail {
+    display: grid;
+    align-content: start;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk-card {
+    animation: none;
+  }
 }
 
 /* ---- the welcome page ---------------------------------------------------------------------------- */
@@ -4292,22 +4493,6 @@ html.visitor .landing {
   background: var(--m3-surface-container-low);
   text-align: center;
 }
-.gate-shape {
-  width: 88px;
-  height: 88px;
-  margin-bottom: 4px;
-  color: var(--m3-primary);
-  animation: gate-spin 14s linear infinite;
-}
-@keyframes gate-spin {
-  to {
-    rotate: 1turn;
-  }
-}
-.gate.open .gate-shape {
-  color: var(--m3-tertiary);
-  animation: none;
-}
 .gate-tag {
   padding: 4px 12px;
   border-radius: var(--m3-r-full);
@@ -4394,11 +4579,6 @@ html.visitor .landing {
 .gate-legal a {
   color: var(--m3-primary);
   font-weight: 650;
-}
-@media (prefers-reduced-motion: reduce) {
-  .gate-shape {
-    animation: none;
-  }
 }
 
 /* ---- credits, the about row, the storage notice ------------------------------------------- */
@@ -4696,6 +4876,232 @@ body:has(.call-screen:not([hidden])) .m3-toaster {
 }
 .gate m3-loading {
   margin: 8px auto;
+}
+
+/* ---- signing in, 1.6: full screen on a phone and a card on a computer, Budgie's shape alive up top, signing in and
+   joining one tap apart, icons in the boxes, how strong a new password is, and everything easing in --------------- */
+.gate-card {
+  gap: 14px;
+}
+.gate-card > * {
+  animation: gate-in 520ms var(--m3-ease-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1)) both;
+}
+.gate-card > :nth-child(2) { animation-delay: 30ms; }
+.gate-card > :nth-child(3) { animation-delay: 60ms; }
+.gate-card > :nth-child(4) { animation-delay: 90ms; }
+.gate-card > :nth-child(5) { animation-delay: 120ms; }
+.gate-card > :nth-child(6) { animation-delay: 150ms; }
+.gate-card > :nth-child(7) { animation-delay: 180ms; }
+.gate-card > :nth-child(n + 8) { animation-delay: 210ms; }
+@keyframes gate-in {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+}
+.gate-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 128px;
+  height: 116px;
+}
+.gate-blob {
+  width: 104px;
+  height: 104px;
+  color: var(--m3-primary);
+  filter: drop-shadow(0 12px 22px color-mix(in srgb, var(--m3-primary) 30%, transparent));
+  animation: gate-turn 22s linear infinite;
+}
+.gate-orbit {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+}
+.gate-orbit.o1 {
+  top: 0;
+  right: -4px;
+  color: var(--m3-tertiary);
+  animation: gate-bob 5.6s ease-in-out infinite;
+}
+.gate-orbit.o2 {
+  bottom: 2px;
+  left: -2px;
+  width: 24px;
+  height: 24px;
+  color: color-mix(in srgb, var(--m3-primary) 55%, var(--m3-tertiary));
+  animation: gate-bob 6.8s ease-in-out -2.4s infinite;
+}
+@keyframes gate-turn {
+  to {
+    rotate: 1turn;
+  }
+}
+@keyframes gate-bob {
+  50% {
+    translate: 0 -9px;
+    rotate: 30deg;
+  }
+}
+.gate.open .gate-blob {
+  color: var(--m3-tertiary);
+}
+.gate h1 {
+  font-size: clamp(26px, 7.4vw, 32px);
+}
+.gate-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  padding: 4px;
+  border-radius: var(--m3-r-full);
+  background: var(--m3-surface-container-highest);
+}
+.gate-switch::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc(50% - 4px);
+  border-radius: var(--m3-r-full);
+  background: var(--m3-primary);
+}
+.gate-switch:has(button:last-child[aria-selected='true'])::before {
+  translate: 100% 0;
+}
+.gate-switch.from-signin::before {
+  animation: gate-pill-right 460ms var(--m3-ease-expressive-fast-spatial, cubic-bezier(0.42, 1.67, 0.21, 0.9)) both;
+}
+.gate-switch.from-signup::before {
+  animation: gate-pill-left 460ms var(--m3-ease-expressive-fast-spatial, cubic-bezier(0.42, 1.67, 0.21, 0.9)) both;
+}
+@keyframes gate-pill-right {
+  from {
+    translate: 0 0;
+  }
+}
+@keyframes gate-pill-left {
+  from {
+    translate: 100% 0;
+  }
+}
+.gate-switch button {
+  position: relative;
+  z-index: 1;
+  min-height: 44px;
+  border: 0;
+  border-radius: var(--m3-r-full);
+  background: none;
+  color: var(--m3-on-surface-variant);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 250ms;
+}
+.gate-switch button[aria-selected='true'] {
+  color: var(--m3-on-primary);
+}
+.gate-input {
+  position: relative;
+  display: block;
+}
+.gate-input > .m3-icon:first-child {
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  translate: 0 -50%;
+  color: var(--m3-on-surface-variant);
+  pointer-events: none;
+}
+.gate-input > input {
+  width: 100%;
+  padding-left: 46px;
+}
+.gate-input:focus-within > .m3-icon:first-child {
+  color: var(--m3-primary);
+}
+.gate-forgot {
+  justify-self: end;
+  margin: -8px 0 -4px;
+  padding: 6px 4px;
+  border: 0;
+  background: none;
+  color: var(--m3-primary);
+  font: inherit;
+  font-size: var(--m3-fs-smaller);
+  font-weight: 650;
+  cursor: pointer;
+}
+.gate-meter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 2px;
+}
+.gate-meter i {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--m3-surface-container-highest);
+  transition: background-color 250ms;
+}
+.gate-meter[data-level='1'] i:first-child {
+  background: var(--m3-error);
+}
+.gate-meter[data-level='2'] i:nth-child(-n + 2) {
+  background: var(--m3-tertiary);
+}
+.gate-meter[data-level='3'] i:nth-child(-n + 3),
+.gate-meter[data-level='4'] i {
+  background: var(--m3-primary);
+}
+.gate-meter-text {
+  color: var(--m3-on-surface-variant);
+  font-size: var(--m3-fs-smaller);
+}
+.gate-meter-text:empty {
+  display: none;
+}
+/* the message line takes no room until it has something to say (it stays, so screen readers hear it when it does) */
+.gate-msg:empty {
+  min-height: 0;
+  margin-block: -7px;
+}
+.gate-note {
+  padding: 10px 14px;
+  border-radius: var(--m3-r-large);
+  background: var(--m3-tertiary-container);
+  color: var(--m3-on-tertiary-container);
+}
+.gate-go {
+  min-height: 52px;
+  margin-top: 2px;
+}
+.gate-go.busy .m3-icon {
+  animation: gate-turn 900ms linear infinite;
+}
+@media (max-width: 719px) {
+  .gate {
+    place-items: start center;
+    padding: calc(8px + var(--nook-top)) 0 calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .gate-card {
+    width: 100%;
+    min-height: 100%;
+    align-content: start;
+    padding: 8px 20px 20px;
+    border-radius: 0;
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gate-blob,
+  .gate-orbit,
+  .gate-card > *,
+  .gate-switch::before {
+    animation: none !important;
+  }
 }
 
 /* ---- live updates, tags, people ------------------------------------------------------------------------ */
@@ -5748,19 +6154,30 @@ html[data-m3-reduce-motion] :is(.ring-halo, .ring-pic, .call-btn.answer .m3-icon
 .call-screen[hidden] {
   display: none;
 }
+/* three columns, the outer two as wide as each other: the title is in the middle of the screen, whatever's beside
+   it (the icons' 48-pixel boxes start 4 pixels in, so the symbols line up 16 pixels in, with everything below) */
 .call-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px 4px;
+}
+.call-top > .call-min {
+  justify-self: start;
+}
+.call-top-end {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px 4px;
+  justify-self: end;
 }
 .call-top .m3-icon-btn {
   color: var(--m3-on-surface);
 }
 .call-title {
   display: grid;
-  flex: 1;
   min-width: 0;
+  max-width: min(58vw, 440px);
   text-align: center;
 }
 .call-title b {
@@ -6000,11 +6417,15 @@ html[data-m3-reduce-motion] :is(.ring-halo, .ring-pic, .call-btn.answer .m3-icon
   border-radius: 44px;
   background: var(--m3-surface-container-high);
 }
-/* a narrow phone: the buttons a little smaller and closer, so they stay in one row */
+/* a narrow phone: the buttons a little smaller and closer, so they stay in one row, and the bar as wide as the
+   screen less 16 pixels each side, the same edge your own picture keeps */
 @media (max-width: 420px) {
   .call-controls {
     flex-wrap: nowrap;
+    justify-content: space-between;
     gap: 8px;
+    width: calc(100% - 32px);
+    max-width: none;
     padding: 8px;
   }
   .call-controls .call-btn {
@@ -7304,5 +7725,213 @@ html[data-m3-reduce-motion] .call-bg m3-shape {
   /* a small phone: the bar keeps Join (Sign in is right under the headline), so longer words still fit */
   .landing-bar [data-gate='signin'] {
     display: none;
+  }
+}
+
+/* ---- keeping your account safe (1.6): two-step sign-in and where you're signed in, in Settings → Account ------ */
+.sec-rows {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0;
+}
+.sec-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 0;
+}
+.sec-row > .m3-icon {
+  flex: none;
+  color: var(--m3-primary);
+}
+.sec-row > .row-text {
+  flex: 1;
+  min-width: 0;
+}
+.sec-row > .m3-btn {
+  flex: none;
+}
+@media (max-width: 520px) {
+  .sec-row {
+    flex-wrap: wrap;
+  }
+  .sec-row > .m3-btn {
+    margin-left: 38px;
+  }
+}
+.tf-qr {
+  width: min(220px, 70vw);
+  margin: 4px auto 8px;
+  padding: 10px;
+  border-radius: var(--m3-r-large);
+  background: #fff;
+}
+.tf-qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tf-key {
+  font-size: clamp(14px, 4.2vw, 18px);
+}
+.tf-setup .tf-link {
+  justify-self: center;
+  margin: 4px auto 10px;
+}
+.tf-setup {
+  display: grid;
+}
+
+/* ---- calls, 1.6: one other person on video fills the screen edge to edge, the bars float over soft shade and
+   step aside after a few seconds of nothing (a tap brings them back) ------------------------------------------- */
+.call-screen.solo .call-bg {
+  display: none;
+}
+.call-screen.solo .call-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: 0;
+}
+.call-screen.solo .call-stage > .call-tile {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  box-shadow: none;
+}
+.call-screen.solo .call-stage > .call-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* the name is in the title already: the tag stays only to say they're muted or deafened, up under the top bar */
+.call-screen.solo .call-stage > .call-tile .tile-name {
+  display: none;
+}
+.call-screen.solo .call-stage > .call-tile .tile-name:has(.tile-muted:not([hidden]), .tile-deaf:not([hidden])) {
+  display: flex;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  bottom: auto;
+  z-index: 2;
+}
+.call-screen.solo .call-stage > .call-tile .tile-name > span:first-child {
+  display: none;
+}
+.call-screen.solo::before,
+.call-screen.solo::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 1;
+  pointer-events: none;
+  transition: opacity 300ms;
+}
+.call-screen.solo::before {
+  top: 0;
+  height: 140px;
+  background: linear-gradient(rgb(0 0 0 / 0.5), transparent);
+}
+.call-screen.solo::after {
+  bottom: 0;
+  height: 200px;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.55));
+}
+.call-screen.solo .call-top,
+.call-screen.solo .call-controls {
+  position: relative;
+  z-index: 2;
+  transition: opacity 300ms var(--m3-ease-standard), translate 400ms var(--m3-ease-emphasized-decel, ease-out);
+}
+/* the stage left the grid, so the bars keep their own rows: the top one up top, the controls at the bottom */
+.call-screen.solo .call-top {
+  grid-row: 1;
+  color: #fff;
+}
+.call-screen.solo .call-controls {
+  grid-row: 3;
+  align-self: end;
+  background: rgb(0 0 0 / 0.38);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.call-screen.solo .call-top .m3-icon-btn,
+.call-screen.solo .call-top .call-lock {
+  color: #fff;
+}
+.call-screen.solo .call-self {
+  z-index: 2;
+}
+.call-screen.solo.idle .call-top,
+.call-screen.solo.idle .call-controls {
+  opacity: 0;
+  pointer-events: none;
+}
+.call-screen.solo.idle .call-top {
+  translate: 0 -24px;
+}
+.call-screen.solo.idle .call-controls {
+  translate: 0 24px;
+}
+.call-screen.solo.idle::before,
+.call-screen.solo.idle::after {
+  opacity: 0;
+}
+
+/* ---- posting, 1.6: on a phone, Cancel and Post float above the bottom bar (or the keyboard) wherever you are in
+   the form, and a photo on its way fills the Post button from the left ------------------------------------------- */
+#f-submit {
+  position: relative;
+  overflow: hidden;
+}
+#f-submit::after {
+  content: '';
+  position: absolute;
+  inset: auto auto 0 0;
+  width: var(--sent, 0%);
+  height: 4px;
+  background: color-mix(in srgb, var(--m3-on-primary) 70%, transparent);
+  transition: width 200ms linear;
+}
+#f-submit:not(:disabled)::after {
+  display: none;
+}
+@media (max-width: 719px) {
+  body[data-view='submit'] .form-actions {
+    position: sticky;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    z-index: 4;
+    margin: 14px -10px -10px;
+    padding: 8px 8px 8px 18px;
+    border-radius: var(--m3-r-full);
+    background: color-mix(in srgb, var(--m3-surface-container-high) 92%, transparent);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 6px 24px rgb(0 0 0 / 0.14);
+  }
+  body.typing[data-view='submit'] .form-actions,
+  body.keyboard[data-view='submit'] .form-actions {
+    bottom: calc(var(--kb, 0px) + 8px);
+  }
+  /* the bottom bar slid away as you scrolled: the buttons go down to the edge with it */
+  body.bars-hidden[data-view='submit'] .form-actions {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  /* one row always: a long "Draft saved" gives way */
+  body[data-view='submit'] .form-actions {
+    flex-wrap: nowrap;
+    transition: bottom 250ms var(--m3-ease-emphasized-decel, ease-out);
+  }
+  body[data-view='submit'] .form-actions .status {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body[data-view='submit'] .form-actions > .m3-btn {
+    flex: none;
   }
 }

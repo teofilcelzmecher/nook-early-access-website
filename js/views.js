@@ -354,14 +354,14 @@
     );
   }
 
-  // a computer's browser (not one of Budgie's apps, not a phone): the app for Windows and Linux is offered
+  // a computer's browser (not one of Budgie's apps, not a phone): the app for Windows, Mac (1.6) and Linux is offered
   const offerDesktop = () =>
     !(window.BUDGIE_DESKTOP || window.BUDGIE_APPLE || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) &&
     matchMedia('(hover: hover) and (pointer: fine)').matches &&
-    !/Macintosh|Mac OS X|CrOS/.test(navigator.userAgent);
+    !/CrOS/.test(navigator.userAgent);
   const footCard = () =>
     '<div class="foot-links">' +
-    (offerDesktop() ? '<a href="download.html">Budgie for Windows and Linux</a>' : '') +
+    (offerDesktop() ? '<a href="download.html">Budgie for your computer</a>' : '') +
     '<a href="#/settings">Settings</a><button type="button" data-act="shortcuts">Keyboard shortcuts</button>' +
     '<button type="button" data-act="about-nook">What’s Budgie?</button><button type="button" data-act="credits">Credits</button><a href="terms.html">Terms</a><a href="privacy.html">Privacy</a><a href="licenses.html">Licenses</a>' +
     `<span>Built with Material 3 Expressive. ${Nook.ads && Nook.ads.on ? 'Ads only between posts.' : 'No ads, no trackers.'}</span></div>`;
@@ -660,7 +660,7 @@
             `<article class="nook-card" data-tint="${c.color}" data-tint-always data-href="#/n/${c.id}" data-m3-ripple data-m3-bounce data-m3-hover-root tabindex="0" aria-label="${esc(c.title)}, n/${esc(c.id)}" data-m3-stickers="card-${c.id}" data-count="3" data-min="60" data-max="130" data-clip-radius="23">` +
             `<div class="nc-top"><m3-shape-icon shape="${c.shape}" symbol="${c.symbol}" size="56" icon-size="28"></m3-shape-icon>${joinButton(c)}</div>` +
             `<h3 class="m3-title" translate="no">${esc(c.title)}</h3><div class="meta">n/${esc(c.id)}<span class="count"> · ${a.posts ? plural(a.posts, 'post') : 'no posts yet'}</span></div>` +
-            `<p${ownText(c)}>${esc(c.tagline)}</p><m3-wavy-progress value="${a.level}"${a.week ? ' playing' : ''} aria-label="Activity: ${a.mood}"></m3-wavy-progress></article>`
+            `<p${ownText(c)}>${esc(c.tagline)}</p><m3-wavy-progress value="${a.level}" aria-label="Activity: ${a.mood}"></m3-wavy-progress></article>`
         )
         .join('');
     return {
@@ -995,6 +995,10 @@
         Nook.hooksHTML('settingsSections', header) +
         `<section>${header('pixelCircle', 'manage_accounts', 'Account')}<div class="card setting-card">` +
         `<div class="about-app">${avatar(store.user(store.ME), 48)}<div><b class="m3-title">u/${esc(store.state.me.name)}</b><span class="muted">Signed in${store.isAdmin() ? ' · Admin' : ''}</span></div></div>` +
+        // keeping the account safe (1.6): two-step sign-in, and signing out everywhere else
+        (serverAt('1.6.0') ? `<div class="sec-rows"><div class="sec-row">${icon('verified_user')}<span class="row-text"><b>Two-step sign-in</b><small>${store.state.me.twofa ? 'On: signing in also asks for a code from your authenticator app' : 'Off. Turn it on, and signing in also asks for a code from an app on your phone'}</small></span>` +
+        `<button class="m3-btn ${store.state.me.twofa ? 'text' : 'filled'}" data-act="twofa">${store.state.me.twofa ? 'Turn off' : 'Set up'}</button></div>` +
+        `<div class="sec-row">${icon('devices')}<span class="row-text"><b>Where you’re signed in</b><small data-sessions>This device</small></span><button class="m3-btn tonal" data-act="end-sessions">Sign out everywhere else</button></div></div>` : '') +
         `<div class="toolbar"><button class="m3-btn tonal" data-act="change-password">${icon('password')}Change password</button><button class="m3-btn tonal" data-act="new-recovery">${icon('key')}New recovery code</button><button class="m3-btn tonal" data-act="export">${icon('download')}Export my data</button></div>` +
         `<div class="toolbar"><button class="m3-btn outlined" data-act="sign-out">${icon('logout')}Sign out</button><button class="m3-btn text danger" data-act="delete-account">${icon('person_remove')}Delete account</button></div>` +
         '</div></section>' +
@@ -1008,7 +1012,7 @@
         '</div></section>' +
         `<section>${header('sunny', 'info', 'About')}<div class="card setting-card">` +
         `<div class="about-app"><m3-shape-icon shape="cookie9" symbol="diversity_3" size="56" icon-size="28"></m3-shape-icon><div><b class="m3-title">Budgie</b><span class="muted">Version ${esc(store.VERSION)}</span></div></div>` +
-        `<div class="toolbar"><button class="m3-btn filled" data-act="credits">${icon('stars')}Credits</button><button class="m3-btn tonal" data-act="about-nook">${icon('help')}What’s Budgie?</button>${offerDesktop() ? `<a class="m3-btn tonal" href="download.html">${icon('computer')}Budgie for Windows and Linux</a>` : ''}</div>` +
+        `<div class="toolbar"><button class="m3-btn filled" data-act="credits">${icon('stars')}Credits</button><button class="m3-btn tonal" data-act="about-nook">${icon('help')}What’s Budgie?</button>${Nook.intro ? `<button class="m3-btn tonal" data-act="tour">${icon('slideshow')}Take the tour</button>` : ''}${offerDesktop() ? `<a class="m3-btn tonal" href="download.html">${icon('computer')}Budgie for your computer</a>` : ''}</div>` +
         `<p class="muted">Built on a Material 3 Expressive design system ported from Swiftify. Shapes and morphing from rounded-polygon-qmljs (Apache 2.0); colour from Google’s material-color-utilities (Apache 2.0); type in Google Sans Flex and Material Symbols.</p>` +
         '</div></section>' +
         '</div></div>',

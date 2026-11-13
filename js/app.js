@@ -155,8 +155,39 @@
     true
   );
 
+  // A tap on the bottom bar switches tabs as a phone's own apps do: the tab lights up at once, the page comes in
+  // straight after (no page transition, which would picture both whole pages and hold taps while it moves), each
+  // tab keeps where you'd scrolled to, and tapping the tab you're on takes you back to its top.
+  let tabTap = false;
+  document.addEventListener(
+    'click',
+    (e) => {
+      const tab = e.target instanceof Element ? e.target.closest('.bottom-nav a[data-nav]') : null;
+      if (!tab || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      if (tab.getAttribute('href') === (location.hash || '#/')) {
+        e.preventDefault();
+        scrollTo({ top: 0, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        return;
+      }
+      tabTap = true;
+      for (const el of $$('.bottom-nav [data-nav]')) {
+        if (el === tab) el.setAttribute('aria-current', 'page');
+        else el.removeAttribute('aria-current');
+      }
+    },
+    true
+  );
+
   /** draws the new page, moving from the old one the way you went */
   function navigate(direction) {
+    if (tabTap) {
+      tabTap = false;
+      pendingShare = null;
+      restoring = scrolls.get(location.hash || '#/') || null;
+      // the highlight is painted first, then the page is drawn
+      requestAnimationFrame(() => setTimeout(render, 0));
+      return;
+    }
     const shared = pendingShare && Date.now() - pendingShare.at < 1500 ? pendingShare : null;
     pendingShare = null;
     let postId = shared && shared.post;
@@ -1556,6 +1587,156 @@
     });
   };
 
+  // ---- two-step sign-in and signing out everywhere else (1.6) ----------------------------------------------------
+  const loadQR = () =>
+    window.qrcode
+      ? Promise.resolve(window.qrcode)
+      : new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'js/vendor/qrcode.js';
+          s.onload = () => resolve(window.qrcode);
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+  const refreshSettings = () => /^#\/settings/.test(location.hash) && render();
+  ACTIONS.twofa = () => {
+    if (store.state.me.twofa) {
+      return ui.sheet({
+        headline: 'Turn off two-step sign-in?',
+        symbol: 'gpp_maybe',
+        shape: 'softBoom',
+        html:
+          '<p>Signing in will only ask for your password again.</p>' +
+          '<div class="field"><label for="tf-pass">Your password</label><input class="m3-field" id="tf-pass" type="password" autocomplete="current-password"></div>' +
+          '<div class="field"><label for="tf-code">A code from your authenticator app</label><input class="m3-field" id="tf-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"><span class="error" id="tf-err"></span></div>',
+        actions: [
+          { label: 'Cancel', value: null },
+          {
+            label: 'Turn off',
+            variant: 'filled',
+            run(close, body) {
+              const err = body.querySelector('#tf-err');
+              store
+                .twofaOff(body.querySelector('#tf-pass').value, body.querySelector('#tf-code').value)
+                .then(() => {
+                  close(true);
+                  M3.toast('Two-step sign-in is off', { symbol: 'gpp_maybe', shape: 'softBoom' });
+                  refreshSettings();
+                })
+                .catch((error) => (err.textContent = error.message));
+              return false;
+            },
+          },
+        ],
+      });
+    }
+    ui.sheet({
+      headline: 'Two-step sign-in',
+      symbol: 'verified_user',
+      shape: 'gem',
+      html:
+        '<p>Even with your password, nobody can sign in as you without a code from your phone. You’ll need an authenticator app, like Google Authenticator, Microsoft Authenticator, 2FAS or your password manager.</p>' +
+        '<div class="field"><label for="tf-pass">First, your password</label><input class="m3-field" id="tf-pass" type="password" autocomplete="current-password"><span class="error" id="tf-err"></span></div>' +
+        '<div class="tf-setup" hidden><div class="tf-qr" aria-label="A QR code for your authenticator app"></div>' +
+        '<p class="muted">Scan it with your authenticator app, or type this key into it:</p>' +
+        '<output class="gate-recovery tf-key"></output>' +
+        `<a class="m3-btn tonal tf-link" href="#">${icon('open_in_new')}Open in my authenticator app</a>` +
+        '<div class="field"><label for="tf-code">Then type the 6-digit code it shows</label><input class="m3-field" id="tf-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6"><span class="error" id="tf-err2"></span></div>' +
+        '<p class="muted">Keep your recovery code safe too: it gets you in if you lose your phone.</p></div>',
+      actions: [
+        { label: 'Cancel', value: null },
+        {
+          label: 'Continue',
+          variant: 'filled',
+          id: 'tf-go',
+          run(close, body) {
+            const go = body.closest('dialog').querySelector('#tf-go');
+            const setup = body.querySelector('.tf-setup');
+            if (setup.hidden) {
+              const err = body.querySelector('#tf-err');
+              err.textContent = '';
+              Promise.all([store.twofaSetup(body.querySelector('#tf-pass').value), loadQR().catch(() => null)])
+                .then(([r, qrcode]) => {
+                  body.querySelector('#tf-pass').closest('.field').hidden = true;
+                  setup.hidden = false;
+                  if (qrcode) {
+                    const qr = qrcode(0, 'M');
+                    qr.addData(r.uri);
+                    qr.make();
+                    body.querySelector('.tf-qr').innerHTML = qr.createSvgTag({ cellSize: 5, margin: 3, scalable: true });
+                  }
+                  body.querySelector('.tf-link').href = r.uri;
+                  body.querySelector('.tf-key').textContent = r.secret.match(/.{1,4}/g).join(' ');
+                  go.textContent = 'Turn on';
+                  body.querySelector('#tf-code').focus({ preventScroll: true });
+                })
+                .catch((error) => (err.textContent = error.message));
+              return false;
+            }
+            const err = body.querySelector('#tf-err2');
+            store
+              .twofaOn(body.querySelector('#tf-code').value)
+              .then(() => {
+                close(true);
+                M3.toast('Two-step sign-in is on', { symbol: 'verified_user', shape: 'gem' });
+                fx.haptic([10, 40, 10]);
+                refreshSettings();
+              })
+              .catch((error) => (err.textContent = error.message));
+            return false;
+          },
+        },
+      ],
+    });
+  };
+  // Budgie's Android app (1.6): whether this phone gets notifications, and turning them on after a "Not now"
+  const PUSH_WORDS = {
+    on: 'On. Messages, calls and replies reach you here.',
+    off: 'Off. Turn them on to hear about messages, calls and replies.',
+    blocked: 'Blocked in Android’s settings. To get them, allow notifications for Budgie there.',
+    unavailable: 'This version of Budgie can’t get notifications yet.',
+  };
+  const paintPush = (root, state) => {
+    const note = root.querySelector('[data-push-state]');
+    const go = root.querySelector('[data-act="push-on"]');
+    if (note) note.textContent = PUSH_WORDS[state] || PUSH_WORDS.unavailable;
+    if (go) go.hidden = state !== 'off';
+  };
+  if (window.BudgieNotifications) {
+    Nook.hook(
+      'settingsSections',
+      (header) =>
+        `<section>${header('cookie9', 'notifications', 'Notifications')}<div class="card setting-card"><div class="sec-row">${icon('notifications_active')}` +
+        `<span class="row-text"><b>On this phone</b><small data-push-state>…</small></span><button class="m3-btn filled" data-act="push-on" hidden>Turn on</button></div></div></section>`
+    );
+    Nook.hook('settingsMount', (root) => {
+      window.BudgieNotifications.state().then((state) => paintPush(root, state), () => paintPush(root, 'unavailable'));
+    });
+    ACTIONS['push-on'] = async () => {
+      const state = await window.BudgieNotifications.turnOn().catch(() => 'unavailable');
+      paintPush(document, state);
+      if (state === 'on') M3.toast('Notifications are on', { symbol: 'notifications_active', shape: 'cookie9' });
+    };
+  }
+  ACTIONS['end-sessions'] = async () => {
+    try {
+      await store.endOtherSessions();
+      M3.toast('Signed out everywhere else', { symbol: 'devices', shape: 'pixelCircle' });
+      const note = $('[data-sessions]');
+      if (note) note.textContent = 'Only this device';
+    } catch (error) {
+      showError(error);
+    }
+  };
+  Nook.hook('settingsMount', (root) => {
+    const note = root.querySelector('[data-sessions]');
+    if (note)
+      store.otherSessions().then(
+        (n) => (note.textContent = n ? (n === 1 ? 'This device and 1 other' : `This device and ${n} others`) : 'Only this device'),
+        () => {}
+      );
+  });
+
   ACTIONS['new-recovery'] = () => {
     ui.sheet({
       headline: 'New recovery code',
@@ -2702,6 +2883,7 @@
     shortcuts();
   };
 
+  ACTIONS.tour = () => Nook.intro && Nook.intro.open();
   ACTIONS['about-nook'] = () => {
     closeDrawer();
     const points = [
@@ -3136,9 +3318,17 @@
       try {
         const video = model.type === 'image' && model.video;
         const gif = model.type === 'image' && !video && model.gif;
-        p = await store.createPost({ n: model.nook.id, title: t, body: body.value.trim(), type: video ? 'video' : gif ? 'gif' : model.type, flair: model.flair, link, image: video || gif ? null : model.image, video: video ? video.id : undefined, gif: gif || undefined, poll: options, spoiler: spoiler.checked });
+        p = await store.createPost(
+          { n: model.nook.id, title: t, body: body.value.trim(), type: video ? 'video' : gif ? 'gif' : model.type, flair: model.flair, link, image: video || gif ? null : model.image, video: video ? video.id : undefined, gif: gif || undefined, poll: options, spoiler: spoiler.checked },
+          // a photo on its way: how far it's got, on the button's bar
+          (part) => {
+            status.textContent = part < 1 ? `Posting… ${Math.round(part * 100)}%` : 'Posting…';
+            submitBtn.style.setProperty('--sent', Math.round(part * 100) + '%');
+          }
+        );
       } catch (error) {
         submitBtn.disabled = false;
+        submitBtn.style.removeProperty('--sent');
         M3.rollText(status, 'Not posted yet');
         if (error.field && $('#f-' + (error.field === 'poll' ? 'poll' : error.field) + '-err', root)) $('#f-' + (error.field === 'poll' ? 'poll' : error.field) + '-err', root).textContent = error.message;
         else showError(error);
@@ -3634,6 +3824,12 @@
   applySettings();
   render();
   renderBadges();
+  // the page is drawn: the skeleton it opened behind gives way (1.6)
+  const skeleton = document.querySelector('.boot-skeleton');
+  if (skeleton) {
+    requestAnimationFrame(() => skeleton.classList.add('leaving'));
+    setTimeout(() => skeleton.remove(), 260);
+  }
   setTimeout(() => storageNotice({ banner: true }), 900);
   // badges for a first visit (and streaks) arrive once the page has settled
   setTimeout(() => store.checkBadges(), 1200);
