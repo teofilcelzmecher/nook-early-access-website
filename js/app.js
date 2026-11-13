@@ -823,7 +823,8 @@
     );
   }
 
-  // on a phone a menu rises from the bottom as a sheet, where your thumb already is
+  // on a phone a menu rises from the bottom as a sheet, where your thumb already is (other parts of the app use it too)
+  app.menu = (anchor, items, options) => menu(anchor, items, options);
   function menu(anchor, items, options) {
     if (!matchMedia('(max-width: 719px) and (pointer: coarse)').matches) return M3.menu(anchor, items, options);
     const list = items.filter(Boolean);
@@ -3461,6 +3462,8 @@
     if (!last || last.kind === 'theme') return;
     // a sticker blast (1.5) has already come in flying
     if (last.kind === 'blast') return;
+    // a game (1.7) says who it's from itself
+    if (last.kind === 'game') return M3.snackbar(said(last), { timeout: 8000, action: { label: 'Play', onClick: () => go('#/messages/' + encodeURIComponent(last.from)) } });
     M3.snackbar(`u/${last.from}: ${said(last)}`, { timeout: 6000, action: { label: 'Reply', onClick: () => go('#/messages/' + encodeURIComponent(last.from)) } });
   });
 
