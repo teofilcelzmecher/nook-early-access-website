@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# Installs Budgie's server on Arch Linux. Run it from the copy of the repository in /opt/nook:
+# Installs Budgie's server on Arch Linux. Run it from the copy of the server's (private) repository, in /opt:
 #
-#   sudo git clone https://github.com/teofilcelzmecher/nook-early-access-website /opt/nook
-#   sudo /opt/nook/server/install.sh
+#   sudo /opt/budgie-server/server/install.sh
+#
+# (Getting that copy needs this laptop's key added to the repository on GitHub: see server/README.md. A laptop set up
+# before 1.7.5, from the public website's copy in /opt/nook, moves over with: sudo nook update, then sudo nook private)
 #
 # Safe to run again: it updates what's there and keeps the database. `nook update` runs it with
 # --update after getting the new code, so the service's settings follow along.
@@ -22,9 +24,7 @@ DATA=/var/lib/nook
 
 if [[ "$REPO" == /home/* ]]; then
   echo "Budgie's code is in your home folder ($REPO), which the server can't read."
-  echo "Put it in /opt/nook instead:"
-  echo "  sudo git clone https://github.com/teofilcelzmecher/nook-early-access-website /opt/nook"
-  echo "  sudo /opt/nook/server/install.sh"
+  echo "Put it in /opt instead (see server/README.md), and run install.sh from there."
   exit 1
 fi
 
@@ -124,6 +124,7 @@ cat > /usr/local/bin/nook <<EOF
 [ "\$(id -u)" -eq 0 ] || exec sudo "\$0" "\$@"
 case "\$1" in
   update) cd $REPO && git pull --ff-only && exec bash $REPO/server/install.sh --update ;;
+  private) shift; exec bash $REPO/server/private.sh "\$@" ;;
   logs) exec journalctl -u nook -f ;;
   status) exec systemctl status nook ;;
   restart) systemctl restart nook && echo "Restarted." ; exit ;;

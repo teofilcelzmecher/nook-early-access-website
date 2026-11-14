@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <!-- Only the two scripts written into this page may run (their fingerprints are below; `python3
        nook/tools/csp.py nook/index.html` refreshes them), and whatever those load: Budgie's own files,
-       and Google's ad code when ads are switched on. Ads show in frames, so frames may come from https. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'strict-dynamic' 'sha256-0afKMCyR1V6kz23dtu+A7dqqplNY8lkGq2BqL64SGOA=' 'sha256-91qRlNsKFCb6XR9am3cXdcYxc23AD1bTwgI2tWBXPmY=' https: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: https: http://127.0.0.1:*; connect-src 'self' https: http://127.0.0.1:*; font-src 'self' https://fonts.gstatic.com; object-src 'none'; frame-src https:; base-uri 'self'; form-action 'self'">
+       and Google's ad code when ads are switched on. Ads show in frames, so frames may come from https.
+       WebAssembly may be compiled (1.7.5): the calls' voice cleaner, js/vendor/gtcrn.wasm. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'strict-dynamic' 'sha256-0afKMCyR1V6kz23dtu+A7dqqplNY8lkGq2BqL64SGOA=' 'sha256-91qRlNsKFCb6XR9am3cXdcYxc23AD1bTwgI2tWBXPmY=' 'wasm-unsafe-eval' https: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: https: http://127.0.0.1:*; connect-src 'self' https: http://127.0.0.1:*; font-src 'self' https://fonts.gstatic.com; object-src 'none'; frame-src https:; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="no-referrer">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Budgie</title>
   <meta name="description" content="Budgie is a friendly home for communities, called nests. Each nest has its own colour and shape. Post, comment, add friends, chat in groups and call. Free, and no email needed.">
   <link rel="canonical" href="https://budgiesocial.com/">

@@ -16,15 +16,31 @@ Plug the laptop in and connect it to the internet, then open a terminal.
 
 1. **Update the system and get Budgie's code**
 
+   Budgie's server comes from a private repository, `teofilcelzmecher/budgie-server` (since 1.7.5; built with
+   `nook/tools/build-server.py`). The laptop reads it with a key of its own:
+
    ```sh
-   sudo pacman -Syu git
-   sudo git clone https://github.com/teofilcelzmecher/nook-early-access-website /opt/nook
+   sudo pacman -Syu git openssh
+   sudo install -d -m 700 /etc/nook
+   sudo ssh-keygen -t ed25519 -N '' -C budgie-laptop -f /etc/nook/deploy-key
+   sudo cat /etc/nook/deploy-key.pub
    ```
+
+   On GitHub, open the repository's **Settings → Deploy keys → Add deploy key**, call it "Budgie laptop", paste that
+   line in, leave **Allow write access** off and press **Add key**. Then:
+
+   ```sh
+   sudo GIT_SSH_COMMAND='ssh -i /etc/nook/deploy-key -o IdentitiesOnly=yes' git clone git@github.com:teofilcelzmecher/budgie-server /opt/budgie-server
+   sudo git -C /opt/budgie-server config core.sshCommand 'ssh -i /etc/nook/deploy-key -o IdentitiesOnly=yes'
+   ```
+
+   (A laptop set up before 1.7.5, from the public website's copy in `/opt/nook`, moves over with `sudo nook update`
+   and then `sudo nook private`, which does all of this and keeps the database.)
 
 2. **Install the server**
 
    ```sh
-   sudo /opt/nook/server/install.sh
+   sudo /opt/budgie-server/server/install.sh
    ```
 
    This installs Node.js, FFmpeg (for videos) and Tailscale, creates a `nook` system user, starts Budgie as a service that
