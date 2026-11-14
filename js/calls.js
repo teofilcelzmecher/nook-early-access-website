@@ -260,8 +260,13 @@
   let looping = 0;
   function loop(name, every) {
     unloop();
-    SOUNDS[name]();
-    looping = setInterval(() => SOUNDS[name](), every);
+    const once = () => {
+      SOUNDS[name]();
+      // (1.8) a call ringing here buzzes like a phone, with every ring
+      if (name === 'ring') fx.haptic('ring');
+    };
+    once();
+    looping = setInterval(once, every);
   }
   function unloop() {
     clearInterval(looping);
@@ -344,12 +349,14 @@
     }
   }
 
-  // while a call is ringing or going on and the live connection is down, the app asks every moment instead
+  // while a call is ringing or going on and the live connection is down, the app asks every moment instead: every
+  // 0.6 s while it's still connecting (each step of connecting is a message there and back), then every 1.5 s
+  const connectingNow = () => !!ring || !!(active && (!active.startedAt || [...active.peers.values()].some((p) => p.pc && p.state !== 'connected')));
   const poll = {
     needed() {
       const want = (active || ring) && !live.healthy;
       if (want && !live.poller) {
-        live.poller = setInterval(() => poll.once(), 1500);
+        live.poller = setInterval(() => Date.now() - (live.asked || 0) >= (connectingNow() ? 600 : 1500) && poll.once(), 200);
         poll.once();
       } else if (!want && live.poller) {
         clearInterval(live.poller);
@@ -359,6 +366,7 @@
     async once() {
       if (live.polling) return;
       live.polling = true;
+      live.asked = Date.now();
       try {
         let r = await api.get('/api/signals?after=' + live.after);
         // a server that restarted counts from the start again
@@ -489,7 +497,6 @@
     el.addEventListener('keydown', (e) => e.key === 'Escape' && decline(call));
     fx.play(el.querySelector('.ring-card'), [{ opacity: 0, transform: 'translateY(40px) scale(0.92)' }, { opacity: 1, transform: 'none' }], { duration: fx.lively.duration, easing: fx.lively.easing });
     loop('ring', 2600);
-    if (navigator.vibrate) navigator.vibrate([500, 300, 500, 300, 500, 300, 500, 300, 500, 300, 500]);
     // a keyboard can answer straight away (on a phone, focus would only bring up a tooltip)
     if (matchMedia('(hover: hover)').matches) el.querySelector('[data-ring="answer"]').focus({ preventScroll: true });
     // the server stops the ringing after 35 seconds; this is in case its word never arrives
@@ -897,7 +904,11 @@
     const peer = active.peers.get(lower(name)) || addPeer(name);
     if (peer.pc) return peer;
     peer.offerer = offerer;
-    const pc = (peer.pc = new RTCPeerConnection({ iceServers: active.ice.iceServers, iceTransportPolicy: active.ice.relay ? 'relay' : 'all' }));
+    // (1.8) a few routes are found before they're needed, so connecting doesn't wait for them; and the clock that
+    // decides when a connection that isn't through yet tries again starts now (unstick, below)
+    const pc = (peer.pc = new RTCPeerConnection({ iceServers: active.ice.iceServers, iceTransportPolicy: active.ice.relay ? 'relay' : 'all', iceCandidatePoolSize: 2 }));
+    peer.since = Date.now();
+    peer.tries = 0;
     // four ways each way, always in this order: sound, camera, screen, and the screen's sound (1.3; an older app
     // opens the first three). A camera or a screen that's off sends nothing, and turning one on later swaps a picture
     // in, with nothing to negotiate again. The one answering takes the same ways from the offer (wire, below).
@@ -933,15 +944,17 @@
       if (state === peer.state) return;
       peer.state = state;
       if (state === 'connected') {
-        if (!active.startedAt) active.startedAt = Date.now();
-        peer.restarts = 0;
+        if (!active.startedAt) {
+          active.startedAt = Date.now();
+          fx.haptic('connect');
+        }
+        peer.tries = 0;
         fitBitrate();
       }
-      // a connection that fails gets another go with fresh routes, twice at most
-      if (state === 'failed' && peer.offerer && peer.restarts < 2) {
-        peer.restarts++;
-        offer(peer, true);
-      }
+      // (1.8) a connection that drops gets a moment to come back by itself, and one that fails another go at once:
+      // unstick (every second) does the trying again
+      if (state === 'disconnected') peer.since = Date.now();
+      if (state === 'failed') peer.since = 0;
       drawTile(peer);
       status();
     };
@@ -988,6 +1001,12 @@
     } else if (type === 'media') {
       if (!peer) return;
       const d = data || {};
+      // (1.8) the one who answered isn't getting through: the one who offered starts again, with fresh routes
+      if (d.restart && peer.offerer && peer.pc && d.restart !== peer.restartAsked) {
+        peer.restartAsked = d.restart;
+        peer.since = Date.now();
+        offer(peer, true);
+      }
       peer.mic = d.mic !== false;
       peer.cam = d.cam !== false;
       const was = peer.sharing;
@@ -1126,7 +1145,7 @@
     micLive();
     tell();
     controls();
-    fx.haptic(8);
+    fx.haptic(active.mic ? 'unmute' : 'mute');
   }
 
   /** deafen: you hear nobody (nor their shared screens' sound, nor the soundboard), and your microphone goes off too.
@@ -1143,7 +1162,7 @@
     tell();
     controls();
     (active.deaf ? SOUNDS.deafen : SOUNDS.undeafen)();
-    fx.haptic(8);
+    fx.haptic(active.deaf ? 'mute' : 'unmute');
   }
 
   /** what you hear of someone: their voice (unless you've deafened or muted them for yourself) at the volume you set,
@@ -1184,7 +1203,7 @@
     selfView();
     controls();
     layout();
-    fx.haptic(8);
+    fx.haptic(active.cam ? 'toggleOn' : 'toggleOff');
   }
 
   // ---- sharing your screen (on a computer; phones' browsers can't) ----------------------------------------------
@@ -1358,6 +1377,7 @@
     wake(false);
     poll.needed();
     SOUNDS.end();
+    fx.haptic('hangup');
     if (was.call.group) {
       // the group's call may carry on without you
       if (reason !== 'you') going.delete(was.id);
@@ -1738,7 +1758,7 @@
         } catch (_) {
           /* it stays there for this call */
         }
-        fx.haptic(6);
+        fx.haptic('select');
       }
       drag = null;
       placeSelf(true);
@@ -1814,7 +1834,7 @@
     tile.querySelector('.tile-hushed').hidden = !peer.hushed;
     tile.querySelector('.tile-state').textContent = connected
       ? ''
-      : peer.state === 'failed' ? 'Couldn’t connect' : peer.state === 'disconnected' || peer.state === 'away' ? 'Reconnecting…' : 'Connecting…';
+      : peer.state === 'failed' ? 'Couldn’t connect' : peer.state === 'disconnected' || peer.state === 'away' ? 'Reconnecting…' : peer.tries > 0 ? 'Trying another way…' : 'Connecting…';
     screenTile(peer, connected);
     hearing(peer);
     layout();
@@ -1964,7 +1984,7 @@
     } else if (active.focus === key) active.focus = nextFocus(key);
     if (!on && active.theater === peer.screenTile) closeTheater();
     drawTile(peer);
-    fx.haptic(6);
+    fx.haptic('select');
   }
   /** they stopped sharing, so you stopped watching */
   function stopWatching(peer) {
@@ -2038,7 +2058,7 @@
         .catch(() => {});
     }
     active.peers.forEach((p) => p.screenTile && streamTools(p));
-    fx.haptic(6);
+    fx.haptic('select');
   }
   function closeTheater() {
     if (!active || !active.theater) return;
@@ -2254,7 +2274,7 @@
     if (!active) return;
     const now = Date.now();
     active.reacts = active.reacts.filter((t) => now - t < 10000);
-    if (active.reacts.length >= 6) return fx.haptic(20);
+    if (active.reacts.length >= 6) return fx.haptic('warning');
     active.reacts.push(now);
     const r = Object.assign({ id: ++active.reactId + '-' + now.toString(36) }, what);
     tell({ react: r });
@@ -2417,14 +2437,46 @@
     if (b) b.remove();
   }
 
+  // (1.8) a connection that isn't through after a few seconds tries again with fresh routes, up to three times: the
+  // one who offered starts again (or sends its offer again, if no answer came: it may not have got there), and the
+  // one who answered asks them to. A dropped connection gets 3.5 s to come back by itself first.
+  const PATIENCE = [6000, 7000, 9000];
+  function unstick() {
+    const now = Date.now();
+    for (const peer of active.peers.values()) {
+      if (!peer.pc || peer.state === 'connected' || peer.state === 'away' || peer.state === 'closed') continue;
+      // an offer that's had no answer is sent again sooner: that's only the same message again
+      const unanswered = peer.offerer && peer.pc.signalingState === 'have-local-offer';
+      const wait = peer.state === 'disconnected' ? 3500 : peer.state === 'failed' ? 0 : unanswered ? 3000 : PATIENCE[Math.min(peer.tries, PATIENCE.length - 1)];
+      if (now - peer.since < wait) continue;
+      if (peer.tries >= 3) {
+        if (!peer.gaveUp) {
+          peer.gaveUp = true;
+          peer.state = 'failed';
+          drawTile(peer);
+          if ([...active.peers.values()].every((p) => p.state === 'failed')) M3.snackbar('Couldn’t connect the call. A different Wi-Fi or mobile data can help.');
+        }
+        continue;
+      }
+      peer.tries++;
+      peer.since = now;
+      if (!peer.offerer) send(peer, 'media', Object.assign(mediaState(peer), { restart: peer.tries }));
+      else if (peer.pc.signalingState === 'have-local-offer' && peer.pc.localDescription) send(peer, 'offer', { type: 'offer', sdp: peer.pc.localDescription.sdp });
+      else offer(peer, true);
+      drawTile(peer);
+    }
+  }
+
   function status() {
     if (!active || !active.el) return;
+    unstick();
     const peers = [...active.peers.values()];
     let text;
     if (!peers.length) text = active.outgoing && !active.call.answeredAt ? (active.call.group ? 'Ringing everyone…' : 'Ringing…') : active.call.group ? 'Waiting for others to join…' : 'Connecting…';
     else if (peers.some((p) => p.state === 'connected')) text = clock(Date.now() - (active.startedAt || Date.now())) + (active.call.group ? ` · ${peers.length + 1} in the call` : '');
     else if (peers.every((p) => p.state === 'failed')) text = 'Couldn’t connect';
     else if (peers.some((p) => p.state === 'disconnected' || p.state === 'away')) text = 'Reconnecting…';
+    else if (peers.some((p) => p.tries > 0)) text = 'Trying another way…';
     else text = 'Connecting…';
     const el = active.el.querySelector('.call-status');
     if (el.textContent !== text) el.textContent = text;
