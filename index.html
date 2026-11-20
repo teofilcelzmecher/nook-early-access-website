@@ -6,7 +6,7 @@
        nook/tools/csp.py nook/index.html` refreshes them), and whatever those load: Budgie's own files,
        and Google's ad code when ads are switched on. Ads show in frames, so frames may come from https.
        WebAssembly may be compiled (1.7.5): the calls' voice cleaner, js/vendor/gtcrn.wasm. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'strict-dynamic' 'sha256-0afKMCyR1V6kz23dtu+A7dqqplNY8lkGq2BqL64SGOA=' 'sha256-91qRlNsKFCb6XR9am3cXdcYxc23AD1bTwgI2tWBXPmY=' 'wasm-unsafe-eval' https: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: https: http://127.0.0.1:*; connect-src 'self' https: http://127.0.0.1:*; font-src 'self' https://fonts.gstatic.com; object-src 'none'; frame-src https:; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'strict-dynamic' 'sha256-0afKMCyR1V6kz23dtu+A7dqqplNY8lkGq2BqL64SGOA=' 'sha256-kRRIbiULoDWrsS+TgFUobeQ/o5Jr0nCepEgAP1D+Pis=' 'wasm-unsafe-eval' https: 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https: http://127.0.0.1:*; media-src 'self' blob: https: http://127.0.0.1:*; connect-src 'self' https: http://127.0.0.1:*; font-src 'self' https://fonts.gstatic.com; object-src 'none'; frame-src https:; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Budgie</title>
@@ -24,7 +24,11 @@
   <meta property="og:image:alt" content="Budgie: find your nest">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="theme-color" content="#fdf7ff">
-  <link rel="icon" href="data:,">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-title" content="Budgie">
   <!-- (1.6) Budgie's own icon font, a twentieth of the whole one: fetched at once, alongside the styles -->
   <link rel="preload" href="fonts/icons.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="m3/fonts/fonts.css">
@@ -41,6 +45,8 @@
   <link rel="stylesheet" href="css/intro.css">
   <link rel="stylesheet" href="css/feed.css">
   <link rel="stylesheet" href="css/foryou.css">
+  <link rel="stylesheet" href="css/chirps.css">
+  <link rel="stylesheet" href="css/landing.css">
   <!-- first: hide the app until signing in decides what to show (someone not signed in sees the
        welcome page), and refuse to run inside another site's frame, where someone could trick you into
        tapping things -->
@@ -56,26 +62,74 @@ var g=(/^#\/([a-z]+)/.exec(location.hash)||[])[1]||'home';if(/^(messages|inbox|f
   <section class="landing" id="landing" aria-labelledby="landing-title">
     <header class="landing-bar">
       <span class="landing-brand" translate="no"><m3-shape shape="cookie9" aria-hidden="true"></m3-shape>budgie</span>
-      <span class="landing-bar-actions"><button type="button" class="m3-btn text lang-btn" id="lang-btn" aria-label="Language" aria-haspopup="menu" data-no-i18n><span translate="no" class="m3-icon" aria-hidden="true">translate</span><span id="lang-name" translate="no">English</span></button><button type="button" class="m3-btn text" data-gate="signin">Sign in</button><button type="button" class="m3-btn filled" data-gate="signup">Join</button></span>
+      <span class="landing-bar-actions"><a class="m3-btn text landing-apps-link" href="download.html"><span translate="no" class="m3-icon" aria-hidden="true">download</span><span>Apps</span></a><button type="button" class="m3-btn text lang-btn" id="lang-btn" aria-label="Language" aria-haspopup="menu" data-no-i18n><span translate="no" class="m3-icon" aria-hidden="true">translate</span><span id="lang-name" translate="no">English</span></button><button type="button" class="m3-btn text" data-gate="signin">Sign in</button><button type="button" class="m3-btn filled" data-gate="signup">Join</button></span>
     </header>
 
     <div class="landing-hero">
+      <canvas class="landing-sky" id="landing-sky" aria-hidden="true"></canvas>
       <div class="landing-hero-text">
+        <a class="landing-new" href="#landing-chirps"><span class="landing-new-tag">New</span><span>Chirps: anonymous kind words from your friends</span><span translate="no" class="m3-icon" aria-hidden="true">arrow_downward</span></a>
         <h1 id="landing-title">Find your nest.</h1>
-        <p class="landing-lead">Budgie is a friendly home for communities. Every community is a <b>nest</b>, with its own colour and shape, and the whole app changes to match the nest you’re in.</p>
+        <p class="landing-lead">Budgie is a friendly social app with no ads and no tracking. Join nests for the things you love, talk with your friends, and make your profile truly yours.</p>
         <div class="landing-cta"><button type="button" class="m3-btn filled big" data-gate="signup"><span translate="no" class="m3-icon" aria-hidden="true">person_add</span>Join Budgie, it’s free</button><button type="button" class="m3-btn tonal big" data-gate="signin">Sign in</button></div>
-        <p class="landing-fine">No email or phone number needed. For ages 13 and up.</p>
+        <ul class="landing-promises">
+          <li><span translate="no" class="m3-icon" aria-hidden="true">block</span>No ads</li>
+          <li><span translate="no" class="m3-icon" aria-hidden="true">visibility_off</span>No tracking</li>
+          <li><span translate="no" class="m3-icon" aria-hidden="true">alternate_email</span>No email or phone number</li>
+          <li><span translate="no" class="m3-icon" aria-hidden="true">shield</span>For ages 13 and up</li>
+        </ul>
       </div>
-      <div class="landing-art" aria-hidden="true">
-        <m3-shape id="landing-shape" shape="cookie9"></m3-shape>
-        <span translate="no" class="m3-icon" id="landing-symbol">campaign</span>
-        <span class="landing-art-name" id="landing-name">n/budgiehq</span>
+      <div class="landing-art">
+        <div class="landing-art-shape" aria-hidden="true">
+          <m3-shape id="landing-shape" shape="cookie9"></m3-shape>
+          <span class="landing-art-badge"><span translate="no" class="m3-icon" id="landing-symbol">campaign</span></span>
+          <span class="landing-art-name" id="landing-name">n/budgiehq</span>
+        </div>
+        <button type="button" class="landing-bird" id="landing-bird" aria-label="Say hi to Budgie the budgie">
+          <svg class="bird" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+            <g class="bird-tail"><path d="M78 138 C66 158 50 178 30 194 C48 190 66 176 90 148 Z"/><path class="bird-tail-b" d="M90 142 C86 164 78 182 66 198 C82 190 94 172 102 148 Z"/></g>
+            <g class="bird-feet"><path d="M100 156 l-5 12 M100 156 l3 12 M118 154 l-3 12 M118 154 l5 11"/></g>
+            <ellipse class="bird-body" cx="104" cy="114" rx="44" ry="50" transform="rotate(-16 104 114)"/>
+            <circle class="bird-body" cx="124" cy="62" r="33"/>
+            <ellipse class="bird-belly" cx="122" cy="122" rx="27" ry="36" transform="rotate(-18 122 122)"/>
+            <ellipse class="bird-face" cx="139" cy="70" rx="18" ry="21"/>
+            <g class="bird-wing"><path d="M64 92 C82 72 114 80 120 106 C124 130 110 150 86 148 C70 138 58 116 64 92 Z"/><path class="bird-scallops" d="M76 100 q8 -6 16 0 M94 100 q8 -6 16 0 M72 112 q8 -6 16 0 M90 114 q8 -6 16 0 M78 126 q8 -6 16 0 M96 128 q7 -5 14 0"/></g>
+            <circle class="bird-cheek" cx="146" cy="84" r="5"/>
+            <ellipse class="bird-cere" cx="152" cy="62" rx="6" ry="3.6"/>
+            <path class="bird-beak" d="M149 64 C160 63 167 71 163 80 C159 87 151 85 149 78 Z"/>
+            <g class="bird-eye"><circle cx="133" cy="56" r="6.4"/><circle class="bird-glint" cx="135.4" cy="53.6" r="2.1"/></g>
+          </svg>
+        </button>
+        <p class="landing-bubble" id="landing-bubble" role="status" aria-live="polite"></p>
       </div>
     </div>
 
+    <section class="landing-section landing-chirps" id="landing-chirps" aria-labelledby="landing-chirps-title">
+      <div class="lc-text reveal">
+        <span class="landing-tag"><span translate="no" class="m3-icon" aria-hidden="true">auto_awesome</span>New</span>
+        <h2 id="landing-chirps-title">Get anonymous chirps from your friends</h2>
+        <p>Everyone on Budgie gets a chirp link. Put it on your story, and your friends can send you questions and kind words, even without an account. Nobody sees who sent them, and only kind ones get through.</p>
+        <ol class="lc-steps">
+          <li><b aria-hidden="true">1</b><span>Pick a prompt</span></li>
+          <li><b aria-hidden="true">2</b><span>Share your link on your story</span></li>
+          <li><b aria-hidden="true">3</b><span>Answer the ones you love</span></li>
+        </ol>
+        <button type="button" class="m3-btn filled big" data-gate="signup"><span translate="no" class="m3-icon" aria-hidden="true">mark_chat_unread</span>Get my chirp link</button>
+      </div>
+      <div class="lc-demo reveal">
+        <div class="lc-story" aria-hidden="true">
+          <b class="lc-title">send me a chirp</b>
+          <small class="lc-sub">anonymous · only kind ones get through</small>
+          <div class="lc-card"><span class="lc-face"><m3-shape shape="cookie9"></m3-shape><i translate="no">B</i></span><span class="lc-who" translate="no">u/budgie</span><p class="lc-prompt" id="lc-prompt">Ask me anything</p></div>
+          <span class="lc-sticker"><span translate="no" class="m3-icon">link</span><span translate="no">budgiesocial.com/#/ask/budgie</span></span>
+        </div>
+        <div class="lc-prompts" id="lc-prompts" role="radiogroup" aria-label="Try a prompt"></div>
+      </div>
+    </section>
+
     <section class="landing-section" aria-labelledby="landing-nests">
-      <h2 id="landing-nests">Communities are nests</h2>
-      <p>Tap one and watch Budgie change around it. Join the nests you like, or start your own.</p>
+      <h2 id="landing-nests" class="reveal">Communities are nests</h2>
+      <p class="reveal">Tap one and watch Budgie change around it. Join the nests you like, or start your own.</p>
       <div class="landing-chips">
           <button type="button" class="nest-chip" data-nest="budgiehq" data-title="Budgie HQ" data-color="#6750a4" data-shape="cookie9" data-symbol="campaign" data-tagline="Ideas, feedback and questions about Budgie itself." data-example="Idea: let us pin our favourite nests to the top of the menu" aria-pressed="true"><m3-shape-icon shape="cookie9" symbol="campaign" size="32" icon-size="17" aria-hidden="true" style="--m3-shape-icon-color:#6750a4;--m3-shape-icon-on-color:#fff"></m3-shape-icon>n/budgiehq</button>
           <button type="button" class="nest-chip" data-nest="nightsky" data-title="Night Sky" data-color="#4b5bd6" data-shape="verySunny" data-symbol="rocket_launch" data-tagline="Looking up since forever." data-example="Saw the Moon and Jupiter side by side tonight. Did anyone else catch it?" aria-pressed="false"><m3-shape-icon shape="verySunny" symbol="rocket_launch" size="32" icon-size="17" aria-hidden="true" style="--m3-shape-icon-color:#4b5bd6;--m3-shape-icon-on-color:#fff"></m3-shape-icon>n/nightsky</button>
@@ -102,24 +156,99 @@ var g=(/^#\/([a-z]+)/.exec(location.hash)||[])[1]||'home';if(/^(messages|inbox|f
     </section>
 
     <section class="landing-section" aria-labelledby="landing-features">
-      <h2 id="landing-features">What you can do</h2>
-      <div class="landing-grid">
-          <article class="landing-feature"><m3-shape-icon shape="cookie9" symbol="edit_note" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon><h3>Post anything</h3><p>Text, pictures, GIFs, short videos, links and polls, with flairs and spoiler tags.</p></article>
-          <article class="landing-feature"><m3-shape-icon shape="heart" symbol="favorite" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon><h3>Spark what you love</h3><p>Upvote, or add a Spark when something is lovely, clever, funny or wild.</p></article>
-          <article class="landing-feature"><m3-shape-icon shape="clover4" symbol="chat" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon><h3>Friends, chats and calls</h3><p>Chat with friends one to one or in groups, send pictures and GIFs, and call them by voice or video.</p></article>
-          <article class="landing-feature"><m3-shape-icon shape="flower" symbol="self_improvement" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon><h3>Calm when you want it</h3><p>Calm mode hides every number and streak. Break reminders, dark mode and compact cards too.</p></article>
-          <article class="landing-feature"><m3-shape-icon shape="pixelCircle" symbol="gavel" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon><h3>Kind by design</h3><p>Word lists and small AI checks on Budgie’s own server stop bullying, nudity and scams. Swearing gets dotted out, and real people read every report.</p></article>
-          <article class="landing-feature"><m3-shape-icon shape="gem" symbol="lock" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon><h3>Private by default</h3><p>No email or phone number to sign up. Budgie doesn’t track you or sell your data.</p></article>
+      <h2 id="landing-features" class="reveal">So much to do</h2>
+      <p class="reveal">Everything you’d want from a place to hang out with friends, and a few things you won’t find anywhere else.</p>
+      <div class="landing-bento">
+        <article class="lb lb-wide lb-sky reveal">
+          <div class="lb-art lb-constellation" aria-hidden="true"><i style="--x:12%;--y:62%;--d:0s"></i><i style="--x:27%;--y:30%;--d:.6s"></i><i style="--x:44%;--y:58%;--d:1.2s"></i><i style="--x:58%;--y:22%;--d:.3s"></i><i style="--x:72%;--y:52%;--d:.9s"></i><i style="--x:88%;--y:28%;--d:1.5s"></i><svg viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M12 62 L27 30 L44 58 L58 22 L72 52 L88 28"/></svg></div>
+          <h3>Posts as a constellation</h3><p>Switch Home to a starry sky of posts. Pinch, pan and tap your way through what’s happening.</p>
+        </article>
+        <article class="lb reveal">
+          <div class="lb-art lb-ttt" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <h3>Games in your chats</h3><p>Tic-tac-toe, Connect Four and Rock Paper Scissors with a friend, right in the chat.</p>
+        </article>
+        <article class="lb reveal">
+          <div class="lb-art lb-blast" aria-hidden="true"><m3-shape-icon shape="heart" symbol="favorite" size="40" icon-size="20" style="--d:0s;--x:-46px;--y:-22px"></m3-shape-icon><m3-shape-icon shape="sunny" symbol="star" size="36" icon-size="18" style="--d:.15s;--x:40px;--y:-30px"></m3-shape-icon><m3-shape-icon shape="cookie9" symbol="celebration" size="44" icon-size="22" style="--d:.3s;--x:-6px;--y:-44px"></m3-shape-icon><m3-shape-icon shape="flower" symbol="auto_awesome" size="34" icon-size="17" style="--d:.45s;--x:52px;--y:8px"></m3-shape-icon><m3-shape-icon shape="clover4" symbol="add_reaction" size="38" icon-size="19" style="--d:.6s;--x:-52px;--y:14px"></m3-shape-icon></div>
+          <h3>Stickers and blasts</h3><p>Make your own stickers and emojis, then blast a friend with a shower of them.</p>
+        </article>
+        <article class="lb reveal">
+          <div class="lb-art lb-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <h3>Music with friends</h3><p>See what your friends are listening to, hear 30 seconds of it, or listen along.</p>
+        </article>
+        <article class="lb lb-icon reveal">
+          <m3-shape-icon shape="clover4" symbol="call" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon>
+          <h3>Friends, chats and calls</h3><p>Chat one to one or in groups, send pictures and GIFs, and call by voice or video. Calls are encrypted between you.</p>
+        </article>
+        <article class="lb lb-wide lb-icon reveal">
+          <m3-shape-icon shape="gem" symbol="auto_awesome" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon>
+          <h3>For you, kept on your device</h3><p>Home learns what you enjoy right on your own phone or computer, and what it learns about you never leaves it. You can see it, change it, or turn it off.</p>
+        </article>
+        <article class="lb lb-icon reveal">
+          <m3-shape-icon shape="burst" symbol="local_fire_department" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon>
+          <h3>Streaks and rewards</h3><p>Keep a streak, unlock achievements, and dress up your profile with name effects, frames and scenes.</p>
+        </article>
+        <article class="lb lb-icon reveal">
+          <m3-shape-icon shape="pixelCircle" symbol="gavel" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon>
+          <h3>Kind by design</h3><p>Word lists and small AI checks on Budgie’s own server stop bullying, nudity and scams. Swearing gets dotted out, and real people read every report.</p>
+        </article>
+        <article class="lb lb-icon reveal">
+          <m3-shape-icon shape="flower" symbol="self_improvement" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon>
+          <h3>Calm when you want it</h3><p>Calm mode hides every number and streak. Break reminders, dark mode and compact cards too.</p>
+        </article>
+        <article class="lb lb-icon reveal">
+          <m3-shape-icon shape="gem" symbol="lock" size="48" icon-size="24" aria-hidden="true"></m3-shape-icon>
+          <h3>Private by default</h3><p>No email or phone number to sign up. Budgie doesn’t track you or sell your data.</p>
+        </article>
       </div>
     </section>
 
-    <section class="landing-section landing-end" aria-labelledby="landing-new">
-      <h2 id="landing-new">Budgie 1.7 is here</h2>
-      <p>Hear what your friends are listening to: link Spotify, play 30 seconds of their song, or listen along. And play Tic-tac-toe, Connect Four or Rock Paper Scissors with them, right in your chat. Built from scratch by one developer, and open to everyone. Something not right? Say so in n/budgiehq and it gets fixed.</p>
+    <section class="landing-section landing-flock" aria-labelledby="landing-flock-title">
+      <h2 id="landing-flock-title" class="reveal">Bring your flock</h2>
+      <p class="reveal">Invite your friends with your chirp link. Everyone who joins and sticks around moves you up Flock leader, and unlocks rewards just for bringing friends.</p>
+      <div class="lf-rewards" id="lf-rewards">
+        <figure class="lf-reward reveal"><div class="lf-art" data-lf="wings" aria-hidden="true"></div><figcaption><b>Wings</b><span>1 friend</span></figcaption></figure>
+        <figure class="lf-reward reveal"><div class="lf-art" data-lf="feathers" aria-hidden="true"></div><figcaption><b>Feathers</b><span>3 friends</span></figcaption></figure>
+        <figure class="lf-reward reveal"><div class="lf-art" data-lf="flock" aria-hidden="true"></div><figcaption><b>Flock</b><span>10 friends</span></figcaption></figure>
+        <figure class="lf-reward reveal"><div class="lf-art" data-lf="prism" aria-hidden="true"></div><figcaption><b>Prism</b><span>25 friends</span></figcaption></figure>
+        <figure class="lf-reward reveal"><div class="lf-art" data-lf="halo" aria-hidden="true"></div><figcaption><b>Halo</b><span>50 friends</span></figcaption></figure>
+      </div>
+      <button type="button" class="m3-btn tonal big reveal" data-gate="signup"><span translate="no" class="m3-icon" aria-hidden="true">group_add</span>Start your flock</button>
+    </section>
+
+    <section class="landing-section" aria-labelledby="landing-apps">
+      <div class="landing-everywhere reveal">
+        <div class="le-text">
+          <h2 id="landing-apps">Budgie on every screen</h2>
+          <p>Use Budgie right here in your browser, on your phone or your computer. On a phone, add it to your Home Screen from your browser’s menu. Or get the app for Windows, Mac and Linux, so calls ring even when Budgie isn’t open.</p>
+          <a class="m3-btn filled big" href="download.html"><span translate="no" class="m3-icon" aria-hidden="true">download</span>Get the computer app</a>
+        </div>
+        <div class="le-devices" aria-hidden="true">
+          <span class="le-laptop"><span class="le-screen"><m3-shape shape="cookie9"></m3-shape></span></span>
+          <span class="le-phone"><span class="le-screen"><m3-shape shape="cookie9"></m3-shape></span></span>
+        </div>
+      </div>
+    </section>
+
+    <section class="landing-section landing-end" aria-labelledby="landing-made">
+      <div class="landing-end-bird" aria-hidden="true"><m3-shape shape="cookie9"></m3-shape><svg class="bird bird-small" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+            <g class="bird-tail"><path d="M78 138 C66 158 50 178 30 194 C48 190 66 176 90 148 Z"/><path class="bird-tail-b" d="M90 142 C86 164 78 182 66 198 C82 190 94 172 102 148 Z"/></g>
+            <g class="bird-feet"><path d="M100 156 l-5 12 M100 156 l3 12 M118 154 l-3 12 M118 154 l5 11"/></g>
+            <ellipse class="bird-body" cx="104" cy="114" rx="44" ry="50" transform="rotate(-16 104 114)"/>
+            <circle class="bird-body" cx="124" cy="62" r="33"/>
+            <ellipse class="bird-belly" cx="122" cy="122" rx="27" ry="36" transform="rotate(-18 122 122)"/>
+            <ellipse class="bird-face" cx="139" cy="70" rx="18" ry="21"/>
+            <g class="bird-wing"><path d="M64 92 C82 72 114 80 120 106 C124 130 110 150 86 148 C70 138 58 116 64 92 Z"/><path class="bird-scallops" d="M76 100 q8 -6 16 0 M94 100 q8 -6 16 0 M72 112 q8 -6 16 0 M90 114 q8 -6 16 0 M78 126 q8 -6 16 0 M96 128 q7 -5 14 0"/></g>
+            <circle class="bird-cheek" cx="146" cy="84" r="5"/>
+            <ellipse class="bird-cere" cx="152" cy="62" rx="6" ry="3.6"/>
+            <path class="bird-beak" d="M149 64 C160 63 167 71 163 80 C159 87 151 85 149 78 Z"/>
+            <g class="bird-eye"><circle cx="133" cy="56" r="6.4"/><circle class="bird-glint" cx="135.4" cy="53.6" r="2.1"/></g>
+          </svg></div>
+      <h2 id="landing-made">Made by one person, with care</h2>
+      <p>Budgie is built from scratch by one developer. No investors, no ads and no tracking: just a kinder place to hang out. Got an idea, or found something broken? Say so in n/budgiehq and it gets fixed.</p>
       <button type="button" class="m3-btn filled big" data-gate="signup"><span translate="no" class="m3-icon" aria-hidden="true">egg</span>Find your nest</button>
     </section>
 
-    <footer class="landing-foot"><a href="terms.html">Terms of Use</a><a href="privacy.html">Privacy Policy</a><a href="licenses.html">Open-source licenses</a></footer>
+    <footer class="landing-foot"><a href="download.html">Apps</a><a href="terms.html">Terms of Use</a><a href="privacy.html">Privacy Policy</a><a href="child-safety.html">Child safety</a><a href="licenses.html">Open-source licenses</a></footer>
   </section>
 
 
@@ -159,6 +288,7 @@ var g=(/^#\/([a-z]+)/.exec(location.hash)||[])[1]||'home';if(/^(messages|inbox|f
       <a class="nav-item" href="#/explore" data-nav="explore" data-m3-ripple data-tone="t" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">explore</span></span><m3-shape-icon class="nav-shape" shape="flower" hover-shape="clover8" symbol="explore" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Explore</span></a>
       <a class="nav-item" href="#/friends" data-nav="friends" data-m3-ripple data-tone="p" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">group</span></span><m3-shape-icon class="nav-shape" shape="heart" hover-shape="cookie6" symbol="group" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Friends</span><span class="nav-count" id="drawer-friends"></span></a>
       <a class="nav-item" href="#/messages" data-nav="messages" data-m3-ripple data-tone="p" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">chat</span></span><m3-shape-icon class="nav-shape" shape="clover4" hover-shape="clover8" symbol="chat" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Messages</span><span class="nav-count" data-messages-badge hidden></span></a>
+      <a class="nav-item" href="#/chirps" data-nav="chirps" data-m3-ripple data-tone="t" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">mark_chat_unread</span><span class="badge" id="chirps-badge" hidden></span></span><m3-shape-icon class="nav-shape" shape="puffy" hover-shape="cookie9" symbol="mark_chat_unread" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Chirps</span></a>
       <a class="nav-item" href="#/saved" data-nav="saved" data-m3-ripple data-tone="t" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">bookmarks</span></span><m3-shape-icon class="nav-shape" shape="arch" hover-shape="bun" symbol="bookmarks" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Saved</span></a>
       <a class="nav-item" href="#/inbox" data-nav="inbox" data-m3-ripple data-tone="t" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">notifications</span></span><m3-shape-icon class="nav-shape" shape="puffy" hover-shape="sunny" symbol="notifications" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Inbox</span><span class="nav-count" id="drawer-unread"></span></a>
       <a class="nav-item" href="#/admin" data-nav="admin" data-admin-only hidden data-m3-ripple data-tone="p" data-m3-hover-root><span class="nav-ind"><span translate="no" class="m3-icon">shield_person</span></span><m3-shape-icon class="nav-shape" shape="pixelCircle" hover-shape="pixel" symbol="shield_person" size="40" icon-size="22" aria-hidden="true"></m3-shape-icon><span class="nav-label">Moderation</span></a>
@@ -203,6 +333,6 @@ var g=(/^#\/([a-z]+)/.exec(location.hash)||[])[1]||'home';if(/^(messages|inbox|f
   </nav>
 
   <!-- the design system, then signing in, which fetches what the app needs and then starts it -->
-  <script>(function(){var L=['ro','es','fr','de','it'],l='';try{l=localStorage.getItem('nook-lang')||''}catch(e){}if(!l){var n=navigator.languages||[navigator.language||''];for(var i=0;i<n.length&&!l;i++){var c=String(n[i]).slice(0,2).toLowerCase();if(c==='en'||L.indexOf(c)>=0)l=c}}var list=['m3/m3-shapes.js','m3/m3.js','js/config.js','js/api.js'];if(L.indexOf(l)>=0)list.push('js/lang/'+l+'.js');list.push('js/icon-names.js','js/i18n.js','js/account.js');list.forEach(function(src){var s=document.createElement('script');s.src=src;s.async=false;document.body.appendChild(s);});})();</script>
+  <script>(function(){var L=['ro','es','fr','de','it'],l='';try{l=localStorage.getItem('nook-lang')||''}catch(e){}if(!l){var n=navigator.languages||[navigator.language||''];for(var i=0;i<n.length&&!l;i++){var c=String(n[i]).slice(0,2).toLowerCase();if(c==='en'||L.indexOf(c)>=0)l=c}}var list=['m3/m3-shapes.js','m3/m3.js','js/config.js','js/api.js'];if(L.indexOf(l)>=0)list.push('js/lang/'+l+'.js');list.push('js/icon-names.js','js/i18n.js','js/ask.js','js/landing.js','js/account.js');list.forEach(function(src){var s=document.createElement('script');s.src=src;s.async=false;document.body.appendChild(s);});})();</script>
 </body>
 </html>

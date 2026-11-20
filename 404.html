@@ -9,15 +9,47 @@
   <!-- GitHub Pages shows this for any address that doesn't exist, however deep, so links start from the top -->
   <base href="/">
   <title>Page not found · Budgie</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="m3/fonts/fonts.css">
   <link rel="stylesheet" href="m3/m3.css">
   <link rel="stylesheet" href="legal.css">
   <style>
-    .lost { display: grid; justify-items: center; gap: 16px; padding: 12vh 0 8vh; text-align: center; }
-    .lost m3-shape { width: 120px; height: 120px; color: var(--m3-primary-container); }
+    .lost { display: grid; justify-items: center; gap: 16px; padding: 6vh 0 8vh; text-align: center; }
     .lost h1 { margin: 0; }
     .lost p { max-width: 28em; margin: 0; color: var(--m3-on-surface-variant); }
-    .lost .m3-btn.filled { color: var(--m3-on-primary); text-decoration: none; }
+    .lost-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+    .lost .m3-btn { text-decoration: none; }
+    .lost .m3-btn.filled { color: var(--m3-on-primary); }
+    /* the budgie, flown off: it flaps about the sky, leaving a dotted trail and a feather or two */
+    .lost-sky { position: relative; width: min(340px, 86vw); height: 220px; }
+    .lost-trail { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .lost-trail path { fill: none; stroke: var(--m3-outline-variant); stroke-width: 3; stroke-linecap: round; stroke-dasharray: 2 12; }
+    .lost-bird { position: absolute; top: 4px; right: 4%; width: 132px; height: 132px; animation: lost-fly 4s ease-in-out infinite; }
+    .lost-bird .bird { width: 100%; height: 100%; overflow: visible; rotate: -14deg; }
+    .lost-bird .bird-feet { display: none; }
+    .bird-body { fill: var(--m3-primary-container); }
+    .bird-belly { fill: color-mix(in srgb, var(--m3-primary-container) 40%, #fff); }
+    .bird-face { fill: color-mix(in srgb, var(--m3-tertiary-container) 30%, #fffaf0); }
+    .bird-wing > path:first-child { fill: color-mix(in srgb, var(--m3-primary-container) 55%, var(--m3-on-primary-container)); }
+    .bird-scallops { fill: none; stroke: var(--m3-primary-container); stroke-width: 2.6; stroke-linecap: round; opacity: .75; }
+    .bird-tail path { fill: color-mix(in srgb, var(--m3-primary-container) 35%, var(--m3-on-primary-container)); }
+    .bird-tail .bird-tail-b { fill: color-mix(in srgb, var(--m3-primary-container) 65%, var(--m3-on-primary-container)); }
+    .bird-cheek { fill: var(--m3-tertiary); opacity: .85; }
+    .bird-cere { fill: color-mix(in srgb, var(--m3-tertiary) 55%, #fff); }
+    .bird-beak { fill: #ffb547; }
+    .bird-eye circle:first-child { fill: #1d1b20; }
+    .bird-glint { fill: #fff; }
+    .bird-wing { transform-box: fill-box; transform-origin: 75% 15%; animation: lost-flap .32s ease-in-out infinite alternate; }
+    .lost-feather { position: absolute; width: 14px; height: 26px; border-radius: 50% 50% 50% 50% / 70% 70% 30% 30%; background: color-mix(in srgb, var(--m3-primary-container) 70%, var(--m3-on-primary-container)); opacity: 0; animation: lost-fall 4.5s ease-in infinite; }
+    .lost-feather.f1 { left: 52%; top: 40%; }
+    .lost-feather.f2 { left: 64%; top: 34%; animation-delay: 1.5s; }
+    .lost-feather.f3 { left: 44%; top: 46%; animation-delay: 3s; }
+    @keyframes lost-fly { 0%, 100% { translate: 0 0; } 25% { translate: -14px -10px; } 50% { translate: 6px -18px; } 75% { translate: 12px -4px; } }
+    @keyframes lost-flap { from { rotate: 12deg; } to { rotate: -38deg; } }
+    @keyframes lost-fall { 0% { opacity: 0; translate: 0 0; rotate: -30deg; } 15% { opacity: .9; } 50% { translate: 18px 70px; rotate: 30deg; } 85% { opacity: .7; } 100% { opacity: 0; translate: -8px 140px; rotate: -20deg; } }
+    @media (prefers-reduced-motion: reduce) { .lost-sky *, .lost-sky { animation: none !important; } .lost-feather { opacity: .8; } }
   </style>
 </head>
 <body class="m3-base">
@@ -26,10 +58,26 @@
       <a class="brand" href="./"><m3-shape shape="cookie9" aria-hidden="true"></m3-shape>budgie</a>
     </div>
     <section class="lost">
-      <m3-shape shape="ghostish" aria-hidden="true"></m3-shape>
+      <div class="lost-sky" aria-hidden="true">
+        <svg class="lost-trail" viewBox="0 0 340 220" preserveAspectRatio="none"><path d="M8 206 C 70 150, 40 90, 120 110 S 190 170, 250 80"/></svg>
+        <div class="lost-bird"><svg class="bird" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+            <g class="bird-tail"><path d="M78 138 C66 158 50 178 30 194 C48 190 66 176 90 148 Z"/><path class="bird-tail-b" d="M90 142 C86 164 78 182 66 198 C82 190 94 172 102 148 Z"/></g>
+            <g class="bird-feet"><path d="M100 156 l-5 12 M100 156 l3 12 M118 154 l-3 12 M118 154 l5 11"/></g>
+            <ellipse class="bird-body" cx="104" cy="114" rx="44" ry="50" transform="rotate(-16 104 114)"/>
+            <circle class="bird-body" cx="124" cy="62" r="33"/>
+            <ellipse class="bird-belly" cx="122" cy="122" rx="27" ry="36" transform="rotate(-18 122 122)"/>
+            <ellipse class="bird-face" cx="139" cy="70" rx="18" ry="21"/>
+            <g class="bird-wing"><path d="M64 92 C82 72 114 80 120 106 C124 130 110 150 86 148 C70 138 58 116 64 92 Z"/><path class="bird-scallops" d="M76 100 q8 -6 16 0 M94 100 q8 -6 16 0 M72 112 q8 -6 16 0 M90 114 q8 -6 16 0 M78 126 q8 -6 16 0 M96 128 q7 -5 14 0"/></g>
+            <circle class="bird-cheek" cx="146" cy="84" r="5"/>
+            <ellipse class="bird-cere" cx="152" cy="62" rx="6" ry="3.6"/>
+            <path class="bird-beak" d="M149 64 C160 63 167 71 163 80 C159 87 151 85 149 78 Z"/>
+            <g class="bird-eye"><circle cx="133" cy="56" r="6.4"/><circle class="bird-glint" cx="135.4" cy="53.6" r="2.1"/></g>
+          </svg></div>
+        <span class="lost-feather f1"></span><span class="lost-feather f2"></span><span class="lost-feather f3"></span>
+      </div>
       <h1>This page has flown away</h1>
       <p>There’s nothing at this address. Budgie itself is just one hop away.</p>
-      <p><a class="m3-btn filled" href="./">Go to Budgie</a></p>
+      <p class="lost-actions"><a class="m3-btn filled" href="./">Go to Budgie</a><a class="m3-btn tonal" href="download.html">Get the apps</a></p>
     </section>
   </main>
   <script src="m3/m3-shapes.js"></script>
