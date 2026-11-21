@@ -6,6 +6,9 @@
   <meta name="referrer" content="no-referrer">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Budgie for Windows, Mac and Linux</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="48x48">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <meta name="description" content="Budgie for your computer: calls that ring even with its window closed, notifications for messages, and screen sharing with sound.">
   <link rel="stylesheet" href="m3/fonts/fonts.css">
   <link rel="stylesheet" href="m3/m3.css">
@@ -94,6 +97,142 @@
     .why .m3-icon {
       color: var(--m3-primary);
     }
+    /* (1.7.9) the top: the budgie on a laptop, and this computer's download (js/download.js guesses which) */
+    .dl-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 230px;
+      align-items: center;
+      gap: 24px;
+    }
+    .dl-lead {
+      max-width: 34em;
+      margin: 10px 0 0;
+      color: var(--m3-on-surface-variant);
+      font-size: 17px;
+      line-height: 1.5;
+    }
+    .dl-mine {
+      margin: 18px 0 0;
+    }
+    .dl-mine .m3-btn {
+      height: 52px;
+      padding: 0 24px;
+      border-radius: 26px;
+      font-size: 16px;
+      color: var(--m3-on-primary);
+      text-decoration: none;
+    }
+    .dl-art {
+      position: relative;
+      height: 200px;
+    }
+    .dl-laptop {
+      position: absolute;
+      left: 6%;
+      right: 6%;
+      bottom: 16px;
+      aspect-ratio: 16 / 10;
+      padding: 7px;
+      border-radius: 12px 12px 4px 4px;
+      background: var(--m3-inverse-surface);
+    }
+    .dl-laptop::after {
+      content: '';
+      position: absolute;
+      left: -8%;
+      right: -8%;
+      bottom: -13px;
+      height: 13px;
+      border-radius: 2px 2px 10px 10px;
+      background: color-mix(in srgb, var(--m3-inverse-surface) 80%, var(--m3-outline));
+    }
+    .dl-laptop span {
+      display: grid;
+      place-items: center;
+      height: 100%;
+      border-radius: 6px;
+      background: linear-gradient(140deg, var(--m3-primary-container), var(--m3-tertiary-container));
+    }
+    .dl-laptop m3-shape {
+      width: 34%;
+      height: auto;
+      aspect-ratio: 1;
+      color: var(--m3-primary);
+    }
+    /* perched on the top of the lid */
+    .dl-art .bird {
+      position: absolute;
+      bottom: calc(100% - 18px);
+      left: 66%;
+      width: 92px;
+      height: 92px;
+      overflow: visible;
+      translate: -50% 0;
+      animation: dl-bob 3.2s ease-in-out infinite;
+    }
+    .bird-body { fill: var(--m3-primary-container); }
+    .bird-belly { fill: color-mix(in srgb, var(--m3-primary-container) 40%, #fff); }
+    .bird-face { fill: color-mix(in srgb, var(--m3-tertiary-container) 30%, #fffaf0); }
+    .bird-wing > path:first-child { fill: color-mix(in srgb, var(--m3-primary-container) 55%, var(--m3-on-primary-container)); }
+    .bird-scallops { fill: none; stroke: var(--m3-primary-container); stroke-width: 2.6; stroke-linecap: round; opacity: .75; }
+    .bird-tail path { fill: color-mix(in srgb, var(--m3-primary-container) 35%, var(--m3-on-primary-container)); }
+    .bird-tail .bird-tail-b { fill: color-mix(in srgb, var(--m3-primary-container) 65%, var(--m3-on-primary-container)); }
+    .bird-feet path { fill: none; stroke: #e98f9c; stroke-width: 4.5; stroke-linecap: round; }
+    .bird-cheek { fill: var(--m3-tertiary); opacity: .85; }
+    .bird-cere { fill: color-mix(in srgb, var(--m3-tertiary) 55%, #fff); }
+    .bird-beak { fill: #ffb547; }
+    .bird-eye circle:first-child { fill: #1d1b20; }
+    .bird-glint { fill: #fff; }
+    @keyframes dl-bob {
+      50% {
+        translate: -50% -4px;
+      }
+    }
+    /* this computer's card, first, with a word on it */
+    .os.mine {
+      background: color-mix(in srgb, var(--m3-primary-container) 45%, var(--m3-surface-container));
+      box-shadow: inset 0 0 0 2px var(--m3-primary);
+    }
+    .mine-tag {
+      margin-left: auto;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--m3-primary);
+      color: var(--m3-on-primary);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    #linux {
+      grid-column: 1 / -1;
+    }
+    #linux .files {
+      grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    }
+    .os ol {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding-left: 20px;
+    }
+    @media (max-width: 640px) {
+      .dl-hero {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .dl-art {
+        order: -1;
+        width: 200px;
+        height: 160px;
+        justify-self: center;
+      }
+      .get {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .dl-art .bird {
+        animation: none;
+      }
+    }
     code {
       padding: 1px 6px;
       border-radius: 6px;
@@ -109,8 +248,27 @@
       <a href="./">Open Budgie in your browser</a>
     </div>
 
-    <h1>Budgie for your computer</h1>
-    <p class="meta">Version 1.7.8 · Windows 10 and 11, Mac (Apple silicon and Intel) and Linux (x64 and ARM)</p>
+    <div class="dl-hero">
+      <div>
+        <h1>Budgie for your computer</h1>
+        <p class="meta">Version 1.7.9 · Windows 10 and 11, Mac (Apple silicon and Intel) and Linux (x64 and ARM)</p>
+        <p class="dl-lead">Calls that ring even when Budgie’s window is closed, notifications for every message, and screen sharing with sound. Free, and no ads.</p>
+        <p class="dl-mine" id="dl-mine" hidden></p>
+      </div>
+      <div class="dl-art" aria-hidden="true"><span class="dl-laptop"><span><m3-shape shape="cookie9"></m3-shape></span><svg class="bird" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+            <g class="bird-tail"><path d="M78 138 C66 158 50 178 30 194 C48 190 66 176 90 148 Z"/><path class="bird-tail-b" d="M90 142 C86 164 78 182 66 198 C82 190 94 172 102 148 Z"/></g>
+            <g class="bird-feet"><path d="M100 156 l-5 12 M100 156 l3 12 M118 154 l-3 12 M118 154 l5 11"/></g>
+            <ellipse class="bird-body" cx="104" cy="114" rx="44" ry="50" transform="rotate(-16 104 114)"/>
+            <circle class="bird-body" cx="124" cy="62" r="33"/>
+            <ellipse class="bird-belly" cx="122" cy="122" rx="27" ry="36" transform="rotate(-18 122 122)"/>
+            <ellipse class="bird-face" cx="139" cy="70" rx="18" ry="21"/>
+            <g class="bird-wing"><path d="M64 92 C82 72 114 80 120 106 C124 130 110 150 86 148 C70 138 58 116 64 92 Z"/><path class="bird-scallops" d="M76 100 q8 -6 16 0 M94 100 q8 -6 16 0 M72 112 q8 -6 16 0 M90 114 q8 -6 16 0 M78 126 q8 -6 16 0 M96 128 q7 -5 14 0"/></g>
+            <circle class="bird-cheek" cx="146" cy="84" r="5"/>
+            <ellipse class="bird-cere" cx="152" cy="62" rx="6" ry="3.6"/>
+            <path class="bird-beak" d="M149 64 C160 63 167 71 163 80 C159 87 151 85 149 78 Z"/>
+            <g class="bird-eye"><circle cx="133" cy="56" r="6.4"/><circle class="bird-glint" cx="135.4" cy="53.6" r="2.1"/></g>
+          </svg></span></div>
+    </div>
 
     <ul class="why">
       <li><span class="m3-icon" aria-hidden="true">ring_volume</span><span><b>Calls ring, always.</b> Close the window and Budgie waits in the tray; it starts with your computer, so a call rings even when you haven’t opened it.</span></li>
@@ -133,6 +291,16 @@
         <p>For Macs with Apple silicon or Intel, on macOS 12 or newer. Open the .dmg and drag Budgie into Applications.</p>
         <a class="m3-btn filled" href="https://github.com/teofilcelzmecher/budgie-downloads/releases/latest/download/Budgie.dmg"><span class="m3-icon" aria-hidden="true">download</span>Download for Mac</a>
         <p class="note">Budgie’s Mac app isn’t notarized by Apple yet, so the first time, your Mac may say it can’t check it. Open <b>System Settings → Privacy &amp; Security</b>, scroll down and choose <b>Open Anyway</b> next to Budgie. (Or a <a href="https://github.com/teofilcelzmecher/budgie-downloads/releases/latest/download/Budgie-mac.zip">.zip</a> instead of the .dmg.)</p>
+      </section>
+
+      <section class="os" id="phone">
+        <h2><span class="m3-icon" aria-hidden="true">devices</span>On your phone</h2>
+        <p>Budgie works right in your phone’s browser. Put it on your home screen and it opens like an app:</p>
+        <ol>
+          <li><b>iPhone and iPad:</b> open budgiesocial.com in Safari, tap <b>Share</b>, then <b>Add to Home Screen</b>.</li>
+          <li><b>Android:</b> open budgiesocial.com in Chrome, tap <b>⋮</b>, then <b>Add to Home screen</b> (or <b>Install app</b>).</li>
+        </ol>
+        <a class="m3-btn filled" href="./"><span class="m3-icon" aria-hidden="true">language</span>Open Budgie</a>
       </section>
 
       <section class="os" id="linux">
@@ -163,5 +331,6 @@
   </main>
   <script src="m3/m3-shapes.js"></script>
   <script src="m3/m3.js"></script>
+  <script src="js/download.js"></script>
 </body>
 </html>
