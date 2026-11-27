@@ -46,6 +46,8 @@
   <link rel="stylesheet" href="css/feed.css">
   <link rel="stylesheet" href="css/foryou.css">
   <link rel="stylesheet" href="css/chirps.css">
+  <link rel="stylesheet" href="css/extras.css">
+  <link rel="stylesheet" href="css/profile-styles.css">
   <link rel="stylesheet" href="css/landing.css">
   <!-- first: hide the app until signing in decides what to show (someone not signed in sees the
        welcome page), and refuse to run inside another site's frame, where someone could trick you into
@@ -324,12 +326,16 @@ var g=(/^#\/([a-z]+)/.exec(location.hash)||[])[1]||'home';if(/^(messages|inbox|f
     </main>
   </div>
 
+  <!-- (1.7.13) the four places in a floating bar of glass, the one you're on in its lens; Create beside it, round -->
   <nav class="bottom-nav" aria-label="Main navigation">
-    <a href="#/" data-nav="home" aria-current="page"><span class="nav-ind"><span translate="no" class="m3-icon">home</span></span>Home</a>
-    <a href="#/explore" data-nav="explore"><span class="nav-ind"><span translate="no" class="m3-icon">explore</span></span>Explore</a>
-    <a href="#/submit" data-nav="submit" class="create"><span class="nav-ind"><span translate="no" class="m3-icon">add</span></span>Create</a>
-    <a href="#/messages" data-nav="messages"><span class="nav-ind"><span translate="no" class="m3-icon">chat</span><span class="badge" data-messages-badge hidden></span></span>Chats</a>
-    <a href="#/inbox" data-nav="inbox"><span class="nav-ind"><span translate="no" class="m3-icon">notifications</span><span class="badge" id="bottom-badge" hidden></span></span>Inbox</a>
+    <div class="bn-bar">
+      <span class="bn-lens" aria-hidden="true"></span>
+      <a href="#/" data-nav="home" aria-current="page" draggable="false"><span translate="no" class="m3-icon" aria-hidden="true">home</span><span class="bn-word">Home</span></a>
+      <a href="#/explore" data-nav="explore" draggable="false"><span translate="no" class="m3-icon" aria-hidden="true">explore</span><span class="bn-word">Explore</span></a>
+      <a href="#/messages" data-nav="messages" draggable="false"><span translate="no" class="m3-icon" aria-hidden="true">chat</span><span class="bn-word">Chats</span><span class="badge" data-messages-badge hidden></span></a>
+      <a href="#/inbox" data-nav="inbox" draggable="false"><span translate="no" class="m3-icon" aria-hidden="true">notifications</span><span class="bn-word">Inbox</span><span class="badge" id="bottom-badge" hidden></span></a>
+    </div>
+    <a href="#/submit" data-nav="submit" class="bn-create" draggable="false"><span translate="no" class="m3-icon" aria-hidden="true">add</span><span class="bn-word">Create</span></a>
   </nav>
 
   <!-- the design system, then signing in, which fetches what the app needs and then starts it -->
